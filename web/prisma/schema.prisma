@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://root:37wWY8OUqRo91vhm5d20TPQat6CJj4Bc@postgresql.internal:5432/zeabur"
+  url      = "postgresql://root:37wWY8OUqRo91vhm5d20TPQat6CJj4Bc@postgresql:5432/zeabur"
 }
 
 // 1. 系统配置表
