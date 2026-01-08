@@ -1,0 +1,41 @@
+// 这是 Prisma 的配置文件
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// 1. 系统配置表
+model SystemConfig {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  description String?
+  updatedAt DateTime @updatedAt
+}
+
+// 2. 用户表
+model User {
+  id            String    @id @default(uuid())
+  phone         String    @unique
+  createdAt     DateTime  @default(now())
+  freeUsage     Int       @default(3)
+  tokenBalance  Int       @default(0)
+  generations   Generation[]
+}
+
+// 3. 生成记录表
+model Generation {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  productName String
+  description String?
+  copyResult  String?
+  imageUrls   String?
+  createdAt   DateTime @default(now())
+}
