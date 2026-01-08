@@ -8,7 +8,9 @@ export async function GET() {
   const store = await listProfilesFromStore().catch(() => ({} as any));
 
   // 把后台 API 管理中心里配置的 profile 也合并进下拉（按 vendor 映射到现有分组）
-  Object.entries(store || {}).forEach(([vendor, types]) => {
+  type ProfileStore = Record<string, { text: string[]; image: string[]; imageseg: string[] }>;
+  const typedStore = (store || {}) as ProfileStore;
+  Object.entries(typedStore).forEach(([vendor, types]) => {
     if (vendor === "volc") (types.text || []).forEach((p: string) => envProfiles.volc.push(p));
     if (vendor === "dashscope") (types.image || []).forEach((p: string) => envProfiles.dashscope.push(p));
     if (vendor === "aliyun-imageseg") (types.imageseg || []).forEach((p: string) => envProfiles.imageseg.push(p));
