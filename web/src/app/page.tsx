@@ -33,7 +33,7 @@ export default function Home() {
           <h1 className="text-4xl font-extrabold tracking-tighter sm:text-5xl md:text-6xl lg:text-7xl max-w-4xl leading-[1.1]">
             让每一份好物，都成为<br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-pink-500 to-amber-500">
-              小红书爆款
+              小红书终极爆款
             </span>
           </h1>
           <p className="mx-auto max-w-[700px] text-zinc-500 md:text-xl dark:text-zinc-400 mt-8 mb-10 leading-relaxed">
