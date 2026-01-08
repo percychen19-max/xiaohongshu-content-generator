@@ -32,7 +32,8 @@ export async function POST(req: Request) {
     }
 
     const out = await zip.generateAsync({ type: "nodebuffer" });
-    return new Response(out as unknown as BodyInit, {
+    // Buffer 可以直接作为 Response body，但需要明确类型转换
+    return new Response(out as any, {
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="${(body.name || "images").slice(0, 40)}.zip"`,
