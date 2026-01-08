@@ -22,8 +22,8 @@ async function createClient(profile?: string | null, vendor = "aliyun-imageseg")
 async function uploadToTempServer(imageBase64: string): Promise<string> {
   // 获取服务器地址（从环境变量或默认值）
   const baseURL = process.env.NEXT_PUBLIC_BASE_URL || 
-                  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
-                  "http://localhost:3000";
+                  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
+                  "http://localhost:3000");
   
   const res = await fetch(`${baseURL}/api/temp-image`, {
     method: "POST",

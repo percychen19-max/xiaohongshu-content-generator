@@ -5,15 +5,22 @@ import { listProfilesFromStore } from "@/lib/credential-resolver";
 export async function GET() {
   // 只返回 profile 名称（不包含任何密钥），可安全用于后台下拉选择
   const envProfiles = listAvailableProfiles();
-  const store = await listProfilesFromStore().catch(() => ({} as any));
-
+  
   // 把后台 API 管理中心里配置的 profile 也合并进下拉（按 vendor 映射到现有分组）
   type ProfileStore = Record<string, { text: string[]; image: string[]; imageseg: string[] }>;
-  const typedStore = (store || {}) as ProfileStore;
-  Object.entries(typedStore).forEach(([vendor, types]) => {
-    if (vendor === "volc") (types.text || []).forEach((p: string) => envProfiles.volc.push(p));
-    if (vendor === "dashscope") (types.image || []).forEach((p: string) => envProfiles.dashscope.push(p));
-    if (vendor === "aliyun-imageseg") (types.imageseg || []).forEach((p: string) => envProfiles.imageseg.push(p));
+  let store: ProfileStore = {};
+  try {
+    const result = await listProfilesFromStore();
+    store = result as ProfileStore;
+  } catch (error) {
+    console.warn("Failed to load profiles from store:", error);
+    store = {};
+  }
+  Object.entries(store).forEach(([vendor, types]) => {
+    const typedTypes = types as { text: string[]; image: string[]; imageseg: string[] };
+    if (vendor === "volc") (typedTypes.text || []).forEach((p: string) => envProfiles.volc.push(p));
+    if (vendor === "dashscope") (typedTypes.image || []).forEach((p: string) => envProfiles.dashscope.push(p));
+    if (vendor === "aliyun-imageseg") (typedTypes.imageseg || []).forEach((p: string) => envProfiles.imageseg.push(p));
   });
 
   // 去重

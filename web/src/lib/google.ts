@@ -29,7 +29,7 @@ export async function generateImageWithGoogle(
   // 优先从凭证存储读取，否则从环境变量读取
   const store = await resolveApiKeyFromStore({ type: "image", vendor: "google", profile });
   const apiKey = store?.apiKey || getGoogleApiKey(profile);
-  const finalBaseURL = baseURL || store?.baseURL;
+  const finalBaseURL = baseURL || store?.baseURL || undefined;
   
   if (!apiKey) {
     throw new Error(`未配置 Google API Key（profile=${profile}）。请在"API管理中心"配置或设置环境变量 GOOGLE_API_KEY`);
@@ -37,7 +37,7 @@ export async function generateImageWithGoogle(
 
   // 如果指定了 baseURL 或 useHttp，使用 HTTP 直接调用（适用于代理服务）
   if (useHttp || finalBaseURL) {
-    return await generateImageViaHttp(prompt, model, apiKey, finalBaseURL, referenceImages);
+    return await generateImageViaHttp(prompt, model, apiKey, finalBaseURL || undefined, referenceImages);
   }
 
   // 否则使用官方 SDK
@@ -88,7 +88,7 @@ export async function generateImageWithGoogle(
   } catch (e: any) {
     // SDK 失败时，尝试降级到 HTTP 调用
     console.warn("Google SDK 调用失败，尝试 HTTP 方式:", e?.message);
-    return await generateImageViaHttp(prompt, model, apiKey, finalBaseURL, referenceImages);
+    return await generateImageViaHttp(prompt, model, apiKey, finalBaseURL || undefined, referenceImages);
   }
 }
 

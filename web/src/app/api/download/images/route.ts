@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     }
 
     const out = await zip.generateAsync({ type: "nodebuffer" });
-    return new Response(out, {
+    return new Response(out as unknown as BodyInit, {
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="${(body.name || "images").slice(0, 40)}.zip"`,
