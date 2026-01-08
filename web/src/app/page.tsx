@@ -31,7 +31,7 @@ export default function Home() {
             <span>AI 驱动的爆文创作神器</span>
           </div>
           <h1 className="text-4xl font-extrabold tracking-tighter sm:text-5xl md:text-6xl lg:text-7xl max-w-4xl leading-[1.1]">
-            让每一件产品，都成为<br />
+            让每一份好物，都成为<br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-pink-500 to-amber-500">
               小红书爆款
             </span>
