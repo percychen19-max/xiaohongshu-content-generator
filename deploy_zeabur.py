@@ -8,10 +8,17 @@ import requests
 import json
 import sys
 import time
+import os
 
 # Zeabur API 配置
-ZEABUR_API_KEY = "sk-f4pme4d4in6x2ainfri5wpdorvcvg"
+# ⚠️ 请从环境变量或安全存储中读取，不要硬编码
+ZEABUR_API_KEY = os.getenv("ZEABUR_API_KEY", "")
 ZEABUR_API_URL = "https://gateway.zeabur.com/graphql"
+
+if not ZEABUR_API_KEY:
+    print("❌ 错误: 请设置环境变量 ZEABUR_API_KEY")
+    print("   使用方法: export ZEABUR_API_KEY='your-api-key'")
+    sys.exit(1)
 
 def query_zeabur(query, variables=None, retries=3):
     """发送 GraphQL 请求到 Zeabur API，带重试机制"""
@@ -164,21 +171,22 @@ mutation($projectId: ObjectID!, $serviceId: ObjectID!, $envs: [VariableInput!]!)
 """
 
 # 必需的环境变量
+# ⚠️ 注意：API 密钥应从环境变量读取，不要硬编码
 envs = [
     {"name": "DATABASE_URL", "value": DATABASE_URL},
-    {"name": "JWT_SECRET", "value": "xhs_secure_percy_2026_change_in_production"},
+    {"name": "JWT_SECRET", "value": os.getenv("JWT_SECRET", "请设置JWT_SECRET环境变量")},
     {"name": "NODE_ENV", "value": "production"},
     {"name": "PORT", "value": "3000"},
     
     # 管理员配置
-    {"name": "ADMIN_USERNAME", "value": "admin"},
-    {"name": "ADMIN_PASSWORD", "value": "admin123"},
+    {"name": "ADMIN_USERNAME", "value": os.getenv("ADMIN_USERNAME", "admin")},
+    {"name": "ADMIN_PASSWORD", "value": os.getenv("ADMIN_PASSWORD", "请设置ADMIN_PASSWORD环境变量")},
     
     # Google API 配置（文案生成）
     {"name": "COPY_ENGINE_VENDOR", "value": "google"},
     {"name": "COPY_ENGINE_MODEL_ID", "value": "gemini-1.5-pro-latest"},
     {"name": "COPY_ENGINE_BASE_URL", "value": "https://gitaigc.com/v1"},
-    {"name": "GOOGLE_API_KEY", "value": "sk-qAKQ3q2at4Vsxp9bMNnMhzZzGrQIuPO5smIohEZuAWR6lpzz"},
+    {"name": "GOOGLE_API_KEY", "value": os.getenv("GOOGLE_API_KEY", "请设置GOOGLE_API_KEY环境变量")},
     
     # Google API 配置（图片生成）
     {"name": "IMAGE_ENGINE_VENDOR", "value": "google"},
@@ -186,7 +194,7 @@ envs = [
     {"name": "IMAGE_ENGINE_BASE_URL", "value": "https://gitaigc.com/v1"},
     
     # 阿里云配置（可选，用于抠图）
-    {"name": "DASHSCOPE_API_KEY", "value": "sk-c93e51d35d464e96adf4d406f85e5541"},
+    {"name": "DASHSCOPE_API_KEY", "value": os.getenv("DASHSCOPE_API_KEY", "")},
     {"name": "DASHSCOPE_BASE_URL", "value": "https://dashscope.aliyuncs.com/api/v1"},
 ]
 

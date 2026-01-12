@@ -62,3 +62,7 @@ web/prisma/migrations/
 *.key
 *.cert
 
+# 部署脚本（可能包含敏感信息）
+deploy_zeabur.py
+zeabur_deploy.py
+

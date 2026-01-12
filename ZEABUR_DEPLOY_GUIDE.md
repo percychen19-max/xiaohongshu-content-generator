@@ -44,7 +44,7 @@ ADMIN_PASSWORD=admin123
 COPY_ENGINE_VENDOR=google
 COPY_ENGINE_MODEL_ID=gemini-1.5-pro-latest
 COPY_ENGINE_BASE_URL=https://gitaigc.com/v1
-GOOGLE_API_KEY=sk-qAKQ3q2at4Vsxp9bMNnMhzZzGrQIuPO5smIohEZuAWR6lpzz
+GOOGLE_API_KEY=你的Google_API_密钥
 ```
 
 #### Google API 配置（图片生成）
@@ -56,7 +56,7 @@ IMAGE_ENGINE_BASE_URL=https://gitaigc.com/v1
 
 #### 阿里云配置（可选，用于抠图）
 ```
-DASHSCOPE_API_KEY=sk-c93e51d35d464e96adf4d406f85e5541
+DASHSCOPE_API_KEY=你的阿里云API密钥
 DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/api/v1
 ```
 
