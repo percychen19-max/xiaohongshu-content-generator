@@ -37,7 +37,9 @@ ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
 
 # 安装 OpenSSL 1.1.x（Prisma 需要）
-RUN apk add --no-cache openssl1.1-compat
+# 尝试从 edge 仓库安装 openssl1.1，如果失败则使用 openssl
+RUN apk add --no-cache --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main openssl1.1 || \
+    apk add --no-cache openssl
 
 # 设置库路径，确保 Prisma 能找到 OpenSSL 库（消除警告）
 ENV LD_LIBRARY_PATH=/usr/lib:/lib:$LD_LIBRARY_PATH
