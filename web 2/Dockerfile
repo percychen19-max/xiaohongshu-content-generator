@@ -22,8 +22,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# 生成 Prisma Client
-RUN npx prisma generate --schema=./prisma/schema.prisma
+# 生成 Prisma Client（使用项目本地的 prisma）
+RUN ./node_modules/.bin/prisma generate --schema=./prisma/schema.prisma
 
 # 构建 Next.js 应用
 ENV NEXT_TELEMETRY_DISABLED 1
@@ -65,5 +65,6 @@ ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
 # 启动脚本：运行数据库迁移并启动应用
-CMD ["sh", "-c", "npx prisma migrate deploy --schema=./prisma/schema.prisma && node server.js"]
+# 使用项目本地的 prisma 而不是全局的，避免版本冲突
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy --schema=./prisma/schema.prisma && node server.js"]
 
