@@ -1,0 +1,55 @@
+========================================
+环境变量清单（按顺序添加）
+========================================
+
+1. PORT
+   值: 3000
+
+2. DATABASE_URL
+   值: 从Zeabur的PostgreSQL服务复制
+
+3. JWT_SECRET
+   值: 请填写一个随机长字符串（至少32位，生产环境务必更换）
+
+4. NODE_ENV
+   值: production
+
+5. ADMIN_USERNAME
+   值: admin
+
+6. ADMIN_PASSWORD
+   值: 请设置强密码（生产环境务必更换）
+
+7. COPY_ENGINE_VENDOR
+   值: google
+
+8. COPY_ENGINE_BASE_URL
+   值: https://gitaigc.com/v1
+
+9. COPY_ENGINE_MODEL_ID
+   值: gemini-1.5-pro-latest
+
+10. GOOGLE_API_KEY
+    值: 你的Google_API_Key
+
+11. IMAGE_ENGINE_VENDOR
+    值: google
+
+12. IMAGE_ENGINE_BASE_URL
+    值: https://gitaigc.com/v1
+
+13. IMAGE_ENGINE_MODEL_ID
+    值: gemini-2.5-flash-image
+
+14. DASHSCOPE_API_KEY
+    值: 你的DashScope_API_Key
+
+15. DASHSCOPE_BASE_URL
+    值: https://dashscope.aliyuncs.com/api/v1
+
+========================================
+重要提示：
+- Root Directory 必须设置为: web 2
+- 所有环境变量都要添加，不能遗漏
+- 复制值时注意不要有多余的空格
+========================================

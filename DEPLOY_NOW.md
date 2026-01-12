@@ -17,7 +17,7 @@ git push origin main
    - 选择项目（如果已存在）或创建新项目
    - 选择从 GitHub 部署
    - 选择仓库：`percychen19-max/xiaohongshu-content-generator`
-   - 根目录设置为：`web`
+   - 根目录设置为：`web 2`（注意 `web` 和 `2` 之间有空格）
    - 配置环境变量（见下方）
    - 点击部署
 
@@ -33,7 +33,7 @@ curl -fsSL https://zeabur.com/cli.sh | sh
 ### 登录并部署
 ```bash
 zeabur login
-cd /Users/percy/xhs/xiaohongshu-content-generator/web
+cd /Users/percy/xhs/xiaohongshu-content-generator/web\ 2
 zeabur deploy
 ```
 

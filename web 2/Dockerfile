@@ -1,9 +1,14 @@
 # 使用官方 Node.js 运行时作为基础镜像
-FROM node:20-alpine AS base
+# 说明：Prisma 在 Alpine(musl) 上经常会遇到 OpenSSL 兼容问题（如缺 libssl.so.1.1）。
+# 为了在 Zeabur 上稳定运行，这里改用 Debian slim（glibc），避免 musl/openssl 版本坑。
+FROM node:20-bookworm-slim AS base
 
 # 安装依赖阶段
 FROM base AS deps
 WORKDIR /app
+
+# Prisma/Node HTTPS 依赖 OpenSSL 与 CA 证书
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # 复制 package 文件
 COPY package.json package-lock.json* ./
@@ -17,6 +22,9 @@ COPY prisma ./prisma
 # 构建阶段
 FROM base AS builder
 WORKDIR /app
+
+# 构建阶段也需要 OpenSSL（Next build 期间可能会加载 Prisma 引擎）
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖
 COPY --from=deps /app/node_modules ./node_modules
@@ -37,7 +45,7 @@ ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
 
 # 安装 OpenSSL（Prisma 需要）
-RUN apk add --no-cache openssl libc6-compat
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # 安装指定版本的 Prisma CLI（关键：必须使用 5.22.0，不能使用 7.x）
 RUN npm install -g prisma@5.22.0
@@ -46,8 +54,8 @@ RUN npm install -g prisma@5.22.0
 ENV LD_LIBRARY_PATH=/usr/lib:/lib:$LD_LIBRARY_PATH
 
 # 创建非 root 用户
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN groupadd --system --gid 1001 nodejs
+RUN useradd --system --uid 1001 --gid 1001 nextjs
 
 # 复制必要的文件
 COPY --from=builder /app/public ./public

@@ -15,12 +15,13 @@ if [ "$confirm" != "yes" ]; then
     exit 1
 fi
 
-# 要清理的 API 密钥
-KEYS=(
-    "sk-qAKQ3q2at4Vsxp9bMNnMhzZzGrQIuPO5smIohEZuAWR6lpzz"
-    "sk-c93e51d35d464e96adf4d406f85e5541"
-    "sk-f4pme4d4in6x2ainfri5wpdorvcvg"
-)
+# 要清理的 API 密钥（请自行填入你曾经泄露/误提交到仓库的 key）
+# 例如：
+# KEYS=(
+#   "sk-xxx"
+#   "sk-yyy"
+# )
+KEYS=()
 
 # 使用 git filter-branch 清理
 for key in "${KEYS[@]}"; do

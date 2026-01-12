@@ -5,9 +5,14 @@
 import requests
 import json
 import sys
+import os
 import time
 
-ZEABUR_TOKEN = "sk-f4pme4d4in6x2ainfri5wpdorvcvg"
+ZEABUR_TOKEN = os.getenv("ZEABUR_API_KEY") or os.getenv("ZEABUR_TOKEN")
+
+if not ZEABUR_TOKEN:
+    print("❌ 缺少环境变量 ZEABUR_API_KEY（或 ZEABUR_TOKEN）")
+    sys.exit(1)
 API_URL = "https://gateway.zeabur.com/graphql"
 
 def query_zeabur(query, variables=None, retries=3):
@@ -153,4 +158,6 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
 

@@ -29,7 +29,7 @@ git push origin main
 
 1. **登录 Zeabur 控制台**
    - 访问：https://zeabur.com
-   - 使用：percychen19@gmail.com / yg2020888
+   - 使用你自己的 Zeabur 账号登录（不要在仓库/文档里记录邮箱密码）
 
 2. **进入项目 "xhs"**
    - 点击项目 "xhs"
@@ -86,4 +86,6 @@ Zeabur 自动检测
 **第一步**：我帮你推送代码到 GitHub
 
 告诉我是否同意，我会立即执行！
+
+
 

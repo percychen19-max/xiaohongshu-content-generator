@@ -15,7 +15,7 @@ CREATE TABLE "User" (
     "phone" TEXT NOT NULL,
     "password" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "freeUsage" INTEGER NOT NULL DEFAULT 10,
+    "freeUsage" INTEGER NOT NULL DEFAULT 3,
     "tokenBalance" INTEGER NOT NULL DEFAULT 0,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")

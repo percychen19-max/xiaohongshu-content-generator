@@ -5,6 +5,7 @@
 import requests
 import json
 import sys
+import os
 import time
 import urllib3
 from requests.adapters import HTTPAdapter
@@ -13,7 +14,11 @@ from urllib3.util.retry import Retry
 # 禁用 SSL 警告（如果使用自签名证书）
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-ZEABUR_TOKEN = "sk-f4pme4d4in6x2ainfri5wpdorvcvg"
+ZEABUR_TOKEN = os.getenv("ZEABUR_API_KEY") or os.getenv("ZEABUR_TOKEN")
+
+if not ZEABUR_TOKEN:
+    print("❌ 缺少环境变量 ZEABUR_API_KEY（或 ZEABUR_TOKEN）")
+    exit(1)
 API_URL = "https://gateway.zeabur.com/graphql"
 
 def create_session():

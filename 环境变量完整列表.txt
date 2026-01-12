@@ -1,0 +1,45 @@
+========================================
+所有环境变量（名称 = 值）
+直接复制使用
+========================================
+
+PORT=3000
+
+DATABASE_URL=从Zeabur的PostgreSQL服务复制
+
+JWT_SECRET=请填写一个随机长字符串（至少32位，生产环境务必更换）
+
+NODE_ENV=production
+
+ADMIN_USERNAME=admin
+
+ADMIN_PASSWORD=请设置强密码（生产环境务必更换）
+
+COPY_ENGINE_VENDOR=google
+
+COPY_ENGINE_BASE_URL=https://gitaigc.com/v1
+
+COPY_ENGINE_MODEL_ID=gemini-1.5-pro-latest
+
+GOOGLE_API_KEY=你的Google_API_Key
+
+IMAGE_ENGINE_VENDOR=google
+
+IMAGE_ENGINE_BASE_URL=https://gitaigc.com/v1
+
+IMAGE_ENGINE_MODEL_ID=gemini-2.5-flash-image
+
+DASHSCOPE_API_KEY=你的DashScope_API_Key
+
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/api/v1
+
+========================================
+使用说明：
+1. 在 Zeabur 控制台的环境变量设置页面
+2. 点击 "Add Variable" 或 "添加变量"
+3. 按照上面的格式，Name 填等号左边的，Value 填等号右边的
+4. 例如：Name 填 PORT，Value 填 3000
+========================================
+
+
+

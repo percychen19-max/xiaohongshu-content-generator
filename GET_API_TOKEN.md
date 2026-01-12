@@ -4,7 +4,7 @@
 
 1. **登录 Zeabur 控制台**
    - 访问：https://zeabur.com
-   - 使用账号：percychen19@gmail.com / yg2020888 登录
+   - 使用你自己的 Zeabur 账号登录（不要在仓库/文档里记录邮箱密码）
 
 2. **进入设置页面**
    - 点击右上角头像
@@ -49,4 +49,6 @@ zeabur deploy
    - 查看是否有 "Local Project" 或其他本地部署选项
 
 告诉我你看到了什么选项，我会给你详细步骤！
+
+
 

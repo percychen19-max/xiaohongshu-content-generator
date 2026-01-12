@@ -8,8 +8,8 @@ import json
 import sys
 import os
 
-# Zeabur API 配置
-ZEABUR_API_KEY = os.getenv("ZEABUR_API_KEY", "sk-f4pme4d4in6x2ainfri5wpdorvcvg")
+# Zeabur API 配置（务必从环境变量读取，禁止在仓库中硬编码）
+ZEABUR_API_KEY = os.getenv("ZEABUR_API_KEY")
 ZEABUR_API_URL = "https://gateway.zeabur.com/graphql"
 
 def query_zeabur(query, variables=None):
@@ -38,6 +38,10 @@ def query_zeabur(query, variables=None):
     except Exception as e:
         print(f"❌ 连接错误: {e}")
         return None
+
+if not ZEABUR_API_KEY:
+    print("❌ 缺少环境变量 ZEABUR_API_KEY（请从 Zeabur 控制台获取 Token 后在本地导出）")
+    sys.exit(1)
 
 print("🔍 检查部署状态...\n")
 

@@ -12,7 +12,8 @@
 2. 点击 "New Project" 创建新项目
 3. 选择 "Deploy from GitHub" 并连接你的仓库
 4. 选择 `xiaohongshu-content-generator` 仓库
-5. 选择根目录为 `web`
+5. **Root Directory（根目录）选择 `web 2`**（注意 `web` 和 `2` 之间有一个空格）
+6. 本项目已提供 `web 2/zeabur.json` + `web 2/Dockerfile`，建议使用 **DOCKERFILE** 方式构建/启动（Zeabur 通常会自动识别）
 
 ### 3. 创建 PostgreSQL 数据库
 
@@ -39,7 +40,7 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=admin123
 ```
 
-#### Google API 配置（文案生成）
+#### Google API 配置（推荐：文案 + 生图都走 Google 代理平台）
 ```
 COPY_ENGINE_VENDOR=google
 COPY_ENGINE_MODEL_ID=gemini-1.5-pro-latest
@@ -47,17 +48,30 @@ COPY_ENGINE_BASE_URL=https://gitaigc.com/v1
 GOOGLE_API_KEY=你的Google_API_密钥
 ```
 
-#### Google API 配置（图片生成）
+#### Google API 配置（图片生成，可选覆盖默认）
 ```
-IMAGE_ENGINE_VENDOR=google
 IMAGE_ENGINE_MODEL_ID=gemini-2.5-flash-image
 IMAGE_ENGINE_BASE_URL=https://gitaigc.com/v1
 ```
 
-#### 阿里云配置（可选，用于抠图）
+#### 抠图（可选）
+默认会跳过抠图（`IMAGESEG_SKIP` 配置中心默认 true）；如你需要更高的“参考图一致性”，可开启抠图并配置阿里云 ImageSeg 凭证。
+
+（可选）强制跳过抠图：
 ```
-DASHSCOPE_API_KEY=你的阿里云API密钥
-DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/api/v1
+IMAGESEG_SKIP=true
+SKIP_IMAGE_SEGMENT=true
+```
+
+启用抠图（可选，用于参考图抠图 / 阿里云 ImageSeg）：
+```
+ALIBABA_CLOUD_ACCESS_KEY_ID=你的阿里云 AccessKeyId
+ALIBABA_CLOUD_ACCESS_KEY_SECRET=你的阿里云 AccessKeySecret
+```
+
+⚠️ 注意：抠图流程会调用你自己的 `/api/temp-image` 生成临时 URL 给阿里云拉取。若你开启抠图，建议同时配置：
+```
+NEXT_PUBLIC_BASE_URL=https://你的线上域名（Zeabur 分配的域名或自定义域名）
 ```
 
 ### 5. 配置 Dockerfile
@@ -66,16 +80,18 @@ DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/api/v1
 
 ### 6. 配置构建和启动命令
 
-在服务设置中：
+如果你使用 **DOCKERFILE**（推荐），构建与启动命令由 `web 2/Dockerfile` 和 `web 2/zeabur.json` 管理，一般无需手动填写。
 
-**Build Command:**
+如果你没有走 DOCKERFILE（不推荐），可使用：
+
+**Build Command（构建）**
 ```bash
 npm run build
 ```
 
-**Start Command:**
+**Start Command（启动）**
 ```bash
-sh -c "npx prisma migrate deploy --schema=./prisma/schema.prisma && node server.js"
+npm run start
 ```
 
 ### 7. 部署
