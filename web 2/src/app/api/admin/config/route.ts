@@ -11,7 +11,7 @@ export async function GET() {
     const configs = await prisma.systemConfig.findMany();
     // 转换成 { key: value } 的格式方便前端使用
     const configMap: Record<string, string> = {};
-    configs.forEach((c) => {
+    configs.forEach((c: { key: string; value: string }) => {
       configMap[c.key] = c.value;
     });
     return NextResponse.json(configMap);
