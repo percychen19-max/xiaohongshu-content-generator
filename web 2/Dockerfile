@@ -39,6 +39,10 @@ ENV NEXT_TELEMETRY_DISABLED 1
 # 安装 OpenSSL 1.1.x（Prisma 需要）
 RUN apk add --no-cache openssl1.1-compat
 
+# 设置 Prisma 使用 OpenSSL 1.1.x（消除警告）
+ENV PRISMA_QUERY_ENGINE_LIBRARY=/usr/lib/libssl.so.1.1
+ENV LD_LIBRARY_PATH=/usr/lib:$LD_LIBRARY_PATH
+
 # 创建非 root 用户
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
