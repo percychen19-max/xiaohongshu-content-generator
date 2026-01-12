@@ -7,8 +7,12 @@ WORKDIR /app
 
 # 复制 package 文件
 COPY package.json package-lock.json* ./
-# 安装依赖
-RUN npm ci
+# 安装依赖（包括 devDependencies，因为构建时需要 prisma）
+RUN npm ci --include=dev
+
+# 复制 prisma schema（用于 postinstall，但我们已经移除了 postinstall）
+# 为了保险，先复制 prisma 目录
+COPY prisma ./prisma
 
 # 构建阶段
 FROM base AS builder

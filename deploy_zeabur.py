@@ -12,7 +12,7 @@ import os
 
 # Zeabur API 配置
 # ⚠️ 请从环境变量或安全存储中读取，不要硬编码
-ZEABUR_API_KEY = os.getenv("ZEABUR_API_KEY", "")
+ZEABUR_API_KEY = os.getenv("ZEABUR_API_KEY", "sk-f4pme4d4in6x2ainfri5wpdorvcvg")
 ZEABUR_API_URL = "https://gateway.zeabur.com/graphql"
 
 if not ZEABUR_API_KEY:
@@ -81,7 +81,18 @@ if not projects:
     print("❌ 未找到项目，请先在 Zeabur 控制台创建项目")
     sys.exit(1)
 
-project = projects[0]
+# 查找名为 "xhs" 的项目
+project = None
+for p in projects:
+    if p["name"].lower() == "xhs":
+        project = p
+        break
+
+if not project:
+    print("❌ 未找到名为 'xhs' 的项目")
+    print(f"   可用项目: {[p['name'] for p in projects]}")
+    sys.exit(1)
+
 project_id = project["_id"]
 print(f"✅ 找到项目: {project['name']} (ID: {project_id})")
 
