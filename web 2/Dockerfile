@@ -53,6 +53,8 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+# 复制 prisma 可执行文件（standalone 构建可能不包含）
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 
 # 设置权限
 RUN chown -R nextjs:nodejs /app
@@ -66,5 +68,6 @@ ENV HOSTNAME "0.0.0.0"
 
 # 启动脚本：运行数据库迁移并启动应用
 # 使用项目本地的 prisma 而不是全局的，避免版本冲突
-CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy --schema=./prisma/schema.prisma && node server.js"]
+# 如果 standalone 中没有 prisma，使用 npx 但指定版本
+CMD ["sh", "-c", "if [ -f ./node_modules/.bin/prisma ]; then ./node_modules/.bin/prisma migrate deploy --schema=./prisma/schema.prisma; else npx prisma@5.22.0 migrate deploy --schema=./prisma/schema.prisma; fi && node server.js"]
 
