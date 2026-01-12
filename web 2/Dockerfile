@@ -37,10 +37,12 @@ ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
 
 # 安装 OpenSSL（Prisma 需要）
-# Alpine Linux 默认的 openssl 包应该足够，如果 Prisma 需要特定版本，会通过 LD_LIBRARY_PATH 处理
 RUN apk add --no-cache openssl libc6-compat
 
-# 设置库路径，确保 Prisma 能找到 OpenSSL 库（消除警告）
+# 安装指定版本的 Prisma CLI（关键：必须使用 5.22.0，不能使用 7.x）
+RUN npm install -g prisma@5.22.0
+
+# 设置库路径
 ENV LD_LIBRARY_PATH=/usr/lib:/lib:$LD_LIBRARY_PATH
 
 # 创建非 root 用户
@@ -53,8 +55,6 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-# 复制 prisma 可执行文件（standalone 构建可能不包含）
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 
 # 设置权限
 RUN chown -R nextjs:nodejs /app
@@ -67,7 +67,6 @@ ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
 # 启动脚本：运行数据库迁移并启动应用
-# 使用项目本地的 prisma 而不是全局的，避免版本冲突
-# 如果 standalone 中没有 prisma，使用 npx 但指定版本
-CMD ["sh", "-c", "if [ -f ./node_modules/.bin/prisma ]; then ./node_modules/.bin/prisma migrate deploy --schema=./prisma/schema.prisma; else npx prisma@5.22.0 migrate deploy --schema=./prisma/schema.prisma; fi && node server.js"]
+# 使用全局安装的 prisma@5.22.0
+CMD ["sh", "-c", "prisma migrate deploy --schema=./prisma/schema.prisma && node server.js"]
 
