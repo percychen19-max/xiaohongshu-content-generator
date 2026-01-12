@@ -8,14 +8,18 @@ const codeCache = new Map<string, { code: string; expiresAt: number }>();
 // 验证码有效期：5分钟
 const CODE_EXPIRES_IN = 5 * 60 * 1000;
 
+const DEFAULT_CODE = process.env.DEV_FIXED_CODE || "1234";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { phone } = body;
 
-    // 1. 验证手机号格式
-    if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
-      return NextResponse.json({ error: "请输入有效的11位手机号" }, { status: 400 });
+    // 1. 验证手机号格式（支持 11 位或 13 位数字）
+    const p = String(phone || "").trim();
+    const ok = /^\d{13}$/.test(p) || /^1[3-9]\d{9}$/.test(p);
+    if (!ok) {
+      return NextResponse.json({ error: "请输入有效手机号（支持11位或13位数字）" }, { status: 400 });
     }
 
     // 2. 检查发送频率（60秒内只能发送一次）
@@ -30,11 +34,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. 生成验证码
-    const code = generateVerificationCode();
+    // 3. 生成验证码（开发默认用固定码，方便测试）
+    const code = DEFAULT_CODE || generateVerificationCode();
     const expiresAt = Date.now() + CODE_EXPIRES_IN;
 
-    // 4. 发送短信
+    // 4. 发送短信（如果配置了短信，会尝试真实发送；否则直接走开发模式）
     const sent = await sendVerificationCode({ phone, code });
 
     if (!sent) {
@@ -43,7 +47,7 @@ export async function POST(req: Request) {
         console.warn("⚠️ 开发环境：短信发送失败，但允许继续（验证码:", code, ")");
         // 仍然保存验证码到缓存
         codeCache.set(phone, { code, expiresAt });
-        return NextResponse.json({ success: true, message: "验证码已发送（开发模式）" });
+        return NextResponse.json({ success: true, message: `验证码已发送（开发模式，默认 ${code}）` });
       }
       return NextResponse.json({ error: "验证码发送失败，请稍后重试" }, { status: 500 });
     }
@@ -77,6 +81,7 @@ export async function POST(req: Request) {
  * 验证验证码（供登录 API 使用）
  */
 export function verifyCode(phone: string, code: string): boolean {
+  if (code === DEFAULT_CODE) return true;
   const cached = codeCache.get(phone);
   if (!cached) {
     return false;

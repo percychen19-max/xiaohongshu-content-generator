@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://root:37wWY8OUqRo91vhm5d20TPQat6CJj4Bc@postgresql:5432/zeabur"
+  url      = env("DATABASE_URL")
 }
 
 // 1. 系统配置表
@@ -22,6 +22,7 @@ model SystemConfig {
 model User {
   id            String    @id @default(uuid())
   phone         String    @unique
+  password      String?   // 加密后的密码（可选，老用户可能没有）
   createdAt     DateTime  @default(now())
   freeUsage     Int       @default(3)
   tokenBalance  Int       @default(0)

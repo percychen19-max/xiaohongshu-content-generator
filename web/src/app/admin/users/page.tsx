@@ -228,7 +228,7 @@ export default function UsersPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <label className="text-sm font-medium">初始体验次数</label>
-                <Input type="number" value={newFreeUsage} onChange={(e) => setNewFreeUsage(e.target.value)} placeholder="默认10次" />
+                <Input type="number" value={newFreeUsage} onChange={(e) => setNewFreeUsage(e.target.value)} placeholder="默认3次" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">初始 Token 余额</label>

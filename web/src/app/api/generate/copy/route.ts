@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { PrismaClient } from "@prisma/client";
-import { getVolcApiKey } from "@/lib/credentials";
+import { getVolcApiKey, getGoogleApiKey } from "@/lib/credentials";
 import { resolveApiKeyFromStore } from "@/lib/credential-resolver";
 
 const DEFAULT_TEXT_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3";
 const DEFAULT_TEXT_MODEL = "doubao-seed-1-6-lite-251015";
+const DEFAULT_GOOGLE_BASE_URL = process.env.GOOGLE_BASE_URL || "https://gitaigc.com/v1";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
@@ -79,6 +80,71 @@ function extractJson(text: string): any | null {
   return null;
 }
 
+function normalizeBody(body: string): string {
+  const text = (body || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let lastBlank = false;
+  for (const raw of lines) {
+    const line = (raw ?? "").trim();
+    if (!line) {
+      if (!lastBlank && out.length > 0) {
+        out.push("");
+        lastBlank = true;
+      }
+      continue;
+    }
+    lastBlank = false;
+    out.push(line);
+  }
+  return out.join("\n").trim();
+}
+
+function countEmojis(s: string): number {
+  if (!s) return 0;
+  // 粗略统计：覆盖常见 emoji 区段（足够用于校验“2-4个”）
+  const m = s.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu);
+  return m ? m.length : 0;
+}
+
+function validateCopy(opt: CopyOption): { ok: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  const title = (opt.title || "").trim();
+  const body = (opt.body || "").trim();
+  const tags = Array.isArray(opt.tags) ? opt.tags.filter(Boolean) : [];
+
+  if (!title) reasons.push("title 为空");
+  if (title.length < 8 || title.length > 20) reasons.push("title 长度不在 8-20");
+  const emojiCount = countEmojis(title);
+  if (emojiCount < 1 || emojiCount > 4) reasons.push("title emoji 数不在 1-4");
+
+  if (!body) reasons.push("body 为空");
+  if (body.length < 100 || body.length > 220) reasons.push("body 长度不在 100-220");
+  // 排版：至少 2 段（用空行分段），避免过于紧凑
+  const paras = body.split(/\n{2,}/).map((x) => x.trim()).filter(Boolean);
+  if (paras.length < 2) reasons.push("body 段落过少（需至少2段，段落间空行）");
+
+  if (tags.length < 8 || tags.length > 10) reasons.push("tags 数量不在 8-10");
+
+  return { ok: reasons.length === 0, reasons };
+}
+
+function ensureBodyLayout(body: string): string {
+  const normalized = normalizeBody(body);
+  const paras = normalized.split(/\n{2,}/).map((x) => x.trim()).filter(Boolean);
+  if (paras.length >= 2) return normalized;
+
+  // 兜底：如果模型没分段，按句号/感叹/问号粗分成 2-3 段，至少让页面好读且不紧凑
+  const sentences = normalized.split(/(?<=[。！？!？])/).map((x) => x.trim()).filter(Boolean);
+  if (sentences.length >= 2) {
+    const mid = Math.max(1, Math.floor(sentences.length / 2));
+    const p1 = sentences.slice(0, mid).join("");
+    const p2 = sentences.slice(mid).join("");
+    return [p1, p2].filter((x) => x && x.trim()).join("\n\n").trim();
+  }
+  return normalized;
+}
+
 export async function POST(req: Request) {
   try {
     const { productName, description, imageUrl } = await req.json();
@@ -94,21 +160,31 @@ export async function POST(req: Request) {
 
     const baseURL =
       (await getConfig("COPY_ENGINE_BASE_URL")) ||
+      process.env.COPY_ENGINE_BASE_URL ||
       process.env.VOLC_BASE_URL ||
       process.env.AI_BASE_URL ||
       process.env.TEXT_BASE_URL ||
-      DEFAULT_TEXT_BASE_URL;
+      process.env.GOOGLE_BASE_URL ||
+      DEFAULT_GOOGLE_BASE_URL;
 
-    const vendor = (await getConfig("COPY_ENGINE_VENDOR")) || "volc";
-    const volcProfile = (await getConfig("COPY_ENGINE_CRED_PROFILE")) || "default";
+    const vendor =
+      (await getConfig("COPY_ENGINE_VENDOR")) ||
+      process.env.COPY_ENGINE_VENDOR ||
+      "volc";
+    const volcProfile =
+      (await getConfig("COPY_ENGINE_CRED_PROFILE")) ||
+      process.env.COPY_ENGINE_CRED_PROFILE ||
+      "default";
     const store = await resolveApiKeyFromStore({ type: "text", vendor, profile: volcProfile });
     
     // 支持 Google 第三方平台（使用 OpenAI 兼容格式）
     let apiKey = store?.apiKey;
     if (!apiKey && vendor === "google") {
-      // Google 第三方平台可能使用图片凭证
+      // 1) 配置中心的 image 凭证（兼容存储）
       const imageStore = await resolveApiKeyFromStore({ type: "image", vendor: "google", profile: volcProfile });
       apiKey = imageStore?.apiKey;
+      // 2) 环境变量
+      if (!apiKey) apiKey = getGoogleApiKey(volcProfile);
     }
     if (!apiKey && vendor === "volc") {
       apiKey = getVolcApiKey(volcProfile);
@@ -121,98 +197,91 @@ export async function POST(req: Request) {
       );
     }
 
-    let finalBaseURL = (await getConfig("COPY_ENGINE_BASE_URL")) || store?.baseURL || baseURL;
+    let finalBaseURL =
+      (await getConfig("COPY_ENGINE_BASE_URL")) ||
+      store?.baseURL ||
+      baseURL ||
+      DEFAULT_GOOGLE_BASE_URL;
     
     // 如果使用 Google 第三方平台，使用其 baseURL
     if (vendor === "google" && !finalBaseURL) {
       const imageStore = await resolveApiKeyFromStore({ type: "image", vendor: "google", profile: volcProfile });
-      finalBaseURL = imageStore?.baseURL || "https://gitaigc.com/v1";
+      finalBaseURL = imageStore?.baseURL || DEFAULT_GOOGLE_BASE_URL;
     }
 
-    const modelFromCfg = (await getConfig("COPY_ENGINE_MODEL_ID")) || process.env.AI_MODEL_NAME || (vendor === "google" ? "gemini-1.5-pro-latest" : DEFAULT_TEXT_MODEL);
+    const modelFromCfg =
+      (await getConfig("COPY_ENGINE_MODEL_ID")) ||
+      process.env.COPY_ENGINE_MODEL_ID ||
+      process.env.AI_MODEL_NAME ||
+      (vendor === "google" ? "gemini-1.5-pro-latest" : DEFAULT_TEXT_MODEL);
     
-    // 根据供应商调整 System Prompt
-    let defaultSystemPrompt = `你是小红书爆款文案专家，深谙小红书平台的文案风格和用户喜好。请严格遵守以下要求：
+    // 根据供应商调整 System Prompt（融合“小红书标题正文生成专家”要求，强制两篇一致格式）
+    let defaultSystemPrompt = `# Role: 小红书标题正文生成专家
 
-## 核心要求
+## 任务
+生成 2 篇完全不同的小红书文案，每篇必须包含：
+- title：15-30 字，2-4 个 Emoji，紧扣卖点/场景，避免绝对化/违规词。
+- body：300-500 字，段落清晰（每段不超 2-3 行），口语化，含场景/细节/情感共鸣，结尾有互动引导（提问/邀请评论），避免硬广和夸大。
+- tags：8-10 个精准标签，不带 #，覆盖关键词/场景/目标人群/风格，且两篇标签至少 50% 差异。
+- **两篇输出格式保持一致**：均为「标题」+「正文分段（含要点/列举）」+「标签数组」的 JSON 结构。
 
-1. **必须生成 2 篇完全不同的文案**，不能重复或相似
-   - 两篇文案的标题角度必须完全不同（如：一篇强调使用效果，另一篇强调使用场景；一篇强调性价比，另一篇强调品质感）
-   - 两篇文案的正文风格必须完全不同（如：一篇偏理性分析+数据对比，另一篇偏感性种草+情感共鸣）
-   - 两篇文案的标签要有明显差异（至少 50% 的标签不同）
+## 差异化
+- 文案一：偏理性/干货/测评（效果、性价比、步骤/技巧），但保持小红书口语和场景细节。
+- 文案二：偏感性/生活方式/故事（氛围感、情绪、品质感），突出使用场景和人物情感。
+- 标题/正文/标签需显著不同，杜绝模板化。
 
-2. **每篇文案必须包含**：
-   - **title**：标题（必须带 2-4 个 Emoji，吸引眼球，15-30 字）
-   - **body**：正文（必须详细丰富，200-500 字，分段清晰，口语化表达）
-   - **tags**：数组（5-10 个话题标签，不带 #，要精准匹配内容）
+## 约束
+- 避免硬广、夸大、敏感/绝对化表述（如“最”“第一”）。
+- 紧扣产品与卖点，不要空洞复述；如有图片提示可参考想象，但不能捏造不合理效果。
+- 全部使用中文与 emoji。
 
-## 小红书文案风格要求
+## 排版/风格
+- 正文必须分段且有空行，可用要点/列点（如「1.」「-」「•」「✔️」等），每段不超 2-3 行，保持小红书口语与种草节奏。
+- 标题/正文/标签整体气质需符合小红书种草风格，避免硬广。
 
-### 标题要求：
-- 必须包含 2-4 个 Emoji（如：✨、💕、🔥、🎉、⭐️、💯 等）
-- 要有吸引力，能引起用户点击欲望
-- 可以包含数字、疑问句、感叹句等
-- 示例风格：「终于找到！这个xxx真的绝了✨💯」「用了3个月，xxx真的值得安利🔥」
-
-### 正文要求：
-- **必须详细丰富**：200-500 字，不能简短敷衍
-- **分段清晰**：使用空行或 Emoji 分隔不同段落
-- **口语化表达**：使用"真的"、"绝了"、"谁懂啊"、"姐妹们"等口语化词汇
-- **真实感强**：要有使用体验、对比感受、具体场景描述
-- **数字卖点**：可以包含具体数字（如"3个月"、"99元"、"5分钟"等）
-- **情感共鸣**：要有情感表达，让用户产生共鸣
-- **结构完整**：开头吸引+中间详细+结尾总结或呼吁
-
-### 标签要求：
-- 5-10 个精准标签
-- 要匹配文案内容，不能随意添加
-- 可以包含产品类型、使用场景、目标人群等
-
-## 两篇文案的差异化要求
-
-**文案一**：可以偏理性分析风格
-- 标题角度：强调效果、性价比、实用性
-- 正文风格：数据对比、使用体验、理性分析
-- 标签：偏实用、性价比、功能类
-
-**文案二**：可以偏感性种草风格
-- 标题角度：强调场景、情感、品质感
-- 正文风格：情感共鸣、使用场景、感性种草
-- 标签：偏情感、场景、品质类
-
-## 输出格式
-
-**严格 JSON 格式，不要 Markdown、不要多余文字、不要解释说明**：
-- ❌ 不要输出"好的，没问题"、"根据您的产品信息"等说明性文字
-- ❌ 不要输出"文案一"、"文案二"等引导性文字
-- ❌ 不要输出"### **文案一:理性分析风格..."等 Markdown 格式的说明
-- ❌ 不要输出分隔线（如"---"）
-- ✅ 只输出纯 JSON 对象，格式如下：
-
-{\"options\":[{\"title\":\"标题1（带Emoji）\",\"body\":\"详细丰富的正文内容（200-500字）\",\"tags\":[\"标签1\",\"标签2\",...]},{\"title\":\"标题2（带Emoji，完全不同角度）\",\"body\":\"详细丰富的正文内容（200-500字，完全不同风格）\",\"tags\":[\"标签1\",\"标签2\",...]}]}`;
+## 输出格式（严格 JSON，无 Markdown/解释）
+{
+  "options": [
+    {"title":"...","body":"...","tags":["..."]},
+    {"title":"...","body":"...","tags":["..."]}
+  ]
+}
+正文需包含：开头引子+分点/分段要点（可用列表语气，段落间有空行）+结尾互动；两篇 body 均按此格式输出。
+`;
     
     if (vendor === "google") {
       // Google API 需要更明确的 JSON 格式要求
-      defaultSystemPrompt = `你是小红书爆款文案专家，深谙小红书平台的文案风格和用户喜好。你必须只返回一个有效的 JSON 对象，不要任何 Markdown 格式、不要任何解释文字、不要代码块标记。
+      defaultSystemPrompt = `# Role: 小红书标题正文生成专家
 
-**核心要求**：
-1. 必须生成 2 篇完全不同的文案，不能重复或相似
-2. 两篇文案的标题角度必须完全不同（如：一篇强调效果，另一篇强调场景）
-3. 两篇文案的正文风格必须完全不同（如：一篇偏理性分析，另一篇偏感性种草）
-4. 两篇文案的标签要有明显差异（至少 50% 的标签不同）
+## 任务
+生成 2 篇完全不同的小红书文案，每篇必须包含：
+- title：15-30 字，2-4 个 Emoji，紧扣卖点/场景，避免绝对化/违规词。
+- body：300-500 字，段落清晰（每段不超 2-3 行），口语化，含场景/细节/情感共鸣，结尾有互动引导（提问/邀请评论），避免硬广和夸大。
+- tags：8-10 个精准标签，不带 #，覆盖关键词/场景/目标人群/风格，且两篇标签至少 50% 差异。
+- **两篇输出格式保持一致**：均为「标题」+「正文分段（含要点/列举）」+「标签数组」的 JSON 结构。
 
-**每篇文案要求**：
-- title：标题（必须带 2-4 个 Emoji，15-30 字，吸引眼球）
-- body：正文（必须详细丰富，200-500 字，分段清晰，口语化表达，真实感强）
-- tags：数组（5-10 个精准标签，不带 #，匹配内容）
+## 差异化
+- 文案一：偏理性/干货/测评（效果、性价比、步骤/技巧），但保持小红书口语和场景细节。
+- 文案二：偏感性/生活方式/故事（氛围感、情绪、品质感），突出使用场景和人物情感。
+- 标题/正文/标签需显著不同，杜绝模板化。
 
-**小红书文案风格**：
-- 标题要有 Emoji，吸引眼球
-- 正文要详细丰富（200-500 字），口语化，有真实感，有情感共鸣
-- 标签要精准匹配内容
+## 约束
+- 避免硬广、夸大、敏感/绝对化表述（如“最”“第一”）。
+- 紧扣产品与卖点，不要空洞复述；如有图片提示可参考想象，但不能捏造不合理效果。
+- 全部使用中文与 emoji。
 
-返回格式必须是：
-{\"options\":[{\"title\":\"标题1（带Emoji）\",\"body\":\"详细丰富的正文内容（200-500字）\",\"tags\":[\"标签1\",\"标签2\"]},{\"title\":\"标题2（带Emoji，完全不同角度）\",\"body\":\"详细丰富的正文内容（200-500字，完全不同风格）\",\"tags\":[\"标签1\",\"标签2\"]}]}
+## 排版/风格
+- 正文必须分段且有空行，可用要点/列点（如「1.」「-」「•」「✔️」等），每段不超 2-3 行，保持小红书口语与种草节奏。
+- 标题/正文/标签整体气质需符合小红书种草风格，避免硬广。
+
+## 输出格式（严格 JSON，无 Markdown/解释）
+{
+  "options": [
+    {"title":"...","body":"...","tags":["..."]},
+    {"title":"...","body":"...","tags":["..."]}
+  ]
+}
+正文需包含：开头引子+分点/分段要点（可用列表语气，段落间有空行）+结尾互动；两篇 body 均按此格式输出。
 
 只返回 JSON，不要其他任何内容。`;
     }
@@ -232,9 +301,9 @@ export async function POST(req: Request) {
 ## 核心要求
 
 1. **只生成 1 篇文案**，包含：
-   - title：标题（带2-4个Emoji，15-30字，吸引眼球，突出亮点）
-   - body：正文（200-500字，分段清晰，口语化，真实感强，情感共鸣，可含数字卖点和使用体验）
-   - tags：数组（5-10个话题标签，不带#，与内容高度相关）
+   - title：标题（≤20字，1-4个Emoji，吸引眼球但不过度夸张，突出亮点/场景）
+   - body：正文（100-200字，必须“有排版”：至少2段，段落间留空行；整体不紧凑，适量Emoji点缀；结尾有轻互动提问）
+   - tags：数组（8-10个话题标签，不带#，与内容高度相关，覆盖关键词/场景/人群/风格）
 
 2. **输出格式**：
    - 严格 JSON 格式，不要 Markdown、不要多余文字、不要解释说明
@@ -242,10 +311,10 @@ export async function POST(req: Request) {
    - ❌ 不要输出"文案一"、"文案二"等引导性文字
    - ❌ 不要输出分隔线（如"---"）
    - ✅ 只输出纯 JSON 对象，格式如下：
-   {\"title\":\"标题（带Emoji）\",\"body\":\"详细丰富的正文内容（200-500字）\",\"tags\":[\"标签1\",\"标签2\",...]}`;
+   {\"title\":\"标题（≤20字，含Emoji）\",\"body\":\"正文（100-200字，至少2段，段落间空行，适量Emoji，结尾互动）\",\"tags\":[\"标签1\",\"标签2\",...]}`;
 
-    // 生成第一篇：理性分析风格
-    console.log("📝 开始生成第一篇文案（理性分析风格）...");
+    // 生成两篇（并行以提速）
+    console.log("📝 开始生成两篇文案（并行）...");
     const prompt1 = `## 产品信息
 **产品名称**：${productName}
 **产品卖点**：${description}
@@ -259,41 +328,15 @@ export async function POST(req: Request) {
 - **标签**：偏实用、性价比、功能类（如"好物推荐"、"性价比"、"实用好物"）
 
 **具体要求**：
-1. 标题必须带 2-4 个 Emoji，15-30 字，吸引眼球
-2. 正文必须详细丰富（200-500 字），分段清晰，口语化表达，真实感强
-3. 标签 5-10 个，匹配内容，偏实用、性价比、功能类
+1. 标题 ≤20 字，带 1-4 个 Emoji，吸引眼球
+2. 正文必须 100-200 字；至少 2 段，段落间留空行；整体不紧凑，适量 Emoji 点缀；收尾必须互动提问
+3. 标签 8-10 个，匹配内容，偏实用、性价比、功能类，且覆盖“关键词/场景/人群/风格”
+4. 整体排版/语气符合小红书种草风格，避免硬广
 
 ${imageUrl ? `**已提供参考图**：请结合图片理解产品外观、使用场景、细节特点，在文案中体现出来。` : `**未提供参考图**：请仅基于文字信息生成，可以适当发挥想象，但要符合产品特点。`}
 
 只返回 JSON，不要其他任何内容。`;
 
-    const completion1 = await client.chat.completions.create({
-      messages: [
-        {
-          role: "system",
-          content: singleCopySystemPrompt,
-        },
-        { 
-          role: "user", 
-          content: [
-            {
-              type: "text",
-              text: prompt1,
-            },
-            ...(imageUrl ? [{ type: "image_url", image_url: { url: imageUrl } }] : []),
-          ] as any
-        }
-      ],
-      model: modelFromCfg,
-      temperature: Number.isFinite(temperature) ? temperature : 0.9,
-      max_tokens: Number.isFinite(maxTokens) ? maxTokens : 4096,
-    });
-
-    const raw1 = completion1.choices[0].message.content || "";
-    console.log("📝 第一篇原始输出:", raw1.substring(0, 300) + "...");
-
-    // 生成第二篇：感性种草风格
-    console.log("📝 开始生成第二篇文案（感性种草风格）...");
     const prompt2 = `## 产品信息
 **产品名称**：${productName}
 **产品卖点**：${description}
@@ -307,37 +350,51 @@ ${imageUrl ? `**已提供参考图**：请结合图片理解产品外观、使�
 - **标签**：偏情感、场景、品质类（如"好物分享"、"生活好物"、"种草"）
 
 **具体要求**：
-1. 标题必须带 2-4 个 Emoji，15-30 字，吸引眼球
-2. 正文必须详细丰富（200-500 字），分段清晰，口语化表达，真实感强
-3. 标签 5-10 个，匹配内容，偏情感、场景、品质类
+1. 标题 ≤20 字，带 1-4 个 Emoji，吸引眼球
+2. 正文必须 100-200 字；至少 2 段，段落间留空行；整体不紧凑，适量 Emoji 点缀；收尾必须互动提问
+3. 标签 8-10 个，匹配内容，偏情感、场景、品质类，且覆盖“关键词/场景/人群/风格”
+4. 整体排版/语气符合小红书种草风格，避免硬广
 
 ${imageUrl ? `**已提供参考图**：请结合图片理解产品外观、使用场景、细节特点，在文案中体现出来。` : `**未提供参考图**：请仅基于文字信息生成，可以适当发挥想象，但要符合产品特点。`}
 
 只返回 JSON，不要其他任何内容。`;
 
-    const completion2 = await client.chat.completions.create({
-      messages: [
-        {
-          role: "system",
-          content: singleCopySystemPrompt,
-        },
-        { 
-          role: "user", 
-          content: [
-            {
-              type: "text",
-              text: prompt2,
-            },
-            ...(imageUrl ? [{ type: "image_url", image_url: { url: imageUrl } }] : []),
-          ] as any
-        }
-      ],
-      model: modelFromCfg,
-      temperature: Number.isFinite(temperature) ? temperature : 0.9,
-      max_tokens: Number.isFinite(maxTokens) ? maxTokens : 4096,
-    });
+    const [completion1, completion2] = await Promise.all([
+      client.chat.completions.create({
+        messages: [
+          { role: "system", content: singleCopySystemPrompt },
+          { 
+            role: "user", 
+            content: [
+              { type: "text", text: prompt1 },
+              ...(imageUrl ? [{ type: "image_url", image_url: { url: imageUrl } }] : []),
+            ] as any
+          }
+        ],
+        model: modelFromCfg,
+        temperature: Number.isFinite(temperature) ? temperature : 0.9,
+        max_tokens: Number.isFinite(maxTokens) ? maxTokens : 4096,
+      }),
+      client.chat.completions.create({
+        messages: [
+          { role: "system", content: singleCopySystemPrompt },
+          { 
+            role: "user", 
+            content: [
+              { type: "text", text: prompt2 },
+              ...(imageUrl ? [{ type: "image_url", image_url: { url: imageUrl } }] : []),
+            ] as any
+          }
+        ],
+        model: modelFromCfg,
+        temperature: Number.isFinite(temperature) ? temperature : 0.9,
+        max_tokens: Number.isFinite(maxTokens) ? maxTokens : 4096,
+      }),
+    ]);
 
+    const raw1 = completion1.choices[0].message.content || "";
     const raw2 = completion2.choices[0].message.content || "";
+    console.log("📝 第一篇原始输出:", raw1.substring(0, 300) + "...");
     console.log("📝 第二篇原始输出:", raw2.substring(0, 300) + "...");
     
     // 3. 解析两篇文案
@@ -380,7 +437,7 @@ ${imageUrl ? `**已提供参考图**：请结合图片理解产品外观、使�
     if (parsed1 && (parsed1.title || parsed1.Title)) {
       copy1 = {
         title: parsed1.title || parsed1.Title || "",
-        body: parsed1.body || parsed1.Body || parsed1.content || parsed1.Content || "",
+        body: normalizeBody(parsed1.body || parsed1.Body || parsed1.content || parsed1.Content || ""),
         tags: Array.isArray(parsed1.tags) ? parsed1.tags : 
               Array.isArray(parsed1.Tags) ? parsed1.Tags :
               typeof parsed1.tags === "string" ? parsed1.tags.split(/[，,、\s]+/).filter(Boolean) :
@@ -410,9 +467,9 @@ ${imageUrl ? `**已提供参考图**：请结合图片理解产品外观、使�
           try {
             const parsed = JSON.parse(jsonStr);
             if (parsed.title || parsed.Title) {
-              copy1 = {
+          copy1 = {
                 title: parsed.title || parsed.Title || "",
-                body: parsed.body || parsed.Body || parsed.content || parsed.Content || "",
+            body: normalizeBody(parsed.body || parsed.Body || parsed.content || parsed.Content || ""),
                 tags: Array.isArray(parsed.tags) ? parsed.tags : 
                       Array.isArray(parsed.Tags) ? parsed.Tags :
                       typeof parsed.tags === "string" ? parsed.tags.split(/[，,、\s]+/).filter(Boolean) :
@@ -454,7 +511,7 @@ ${imageUrl ? `**已提供参考图**：请结合图片理解产品外观、使�
     if (parsed2 && (parsed2.title || parsed2.Title)) {
       copy2 = {
         title: parsed2.title || parsed2.Title || "",
-        body: parsed2.body || parsed2.Body || parsed2.content || parsed2.Content || "",
+        body: normalizeBody(parsed2.body || parsed2.Body || parsed2.content || parsed2.Content || ""),
         tags: Array.isArray(parsed2.tags) ? parsed2.tags : 
               Array.isArray(parsed2.Tags) ? parsed2.Tags :
               typeof parsed2.tags === "string" ? parsed2.tags.split(/[，,、\s]+/).filter(Boolean) :
@@ -487,7 +544,7 @@ ${imageUrl ? `**已提供参考图**：请结合图片理解产品外观、使�
             if (parsed.title || parsed.Title) {
               copy2 = {
                 title: parsed.title || parsed.Title || "",
-                body: parsed.body || parsed.Body || parsed.content || parsed.Content || "",
+                body: normalizeBody(parsed.body || parsed.Body || parsed.content || parsed.Content || ""),
                 tags: Array.isArray(parsed.tags) ? parsed.tags : 
                       Array.isArray(parsed.Tags) ? parsed.Tags :
                       typeof parsed.tags === "string" ? parsed.tags.split(/[，,、\s]+/).filter(Boolean) :
@@ -681,19 +738,73 @@ ${imageUrl ? `**已提供参考图**：请结合图片理解产品外观、使�
       }
       
       // 确保 tags 是字符串数组
-      tags = tags.map(tag => 
+      tags = tags
+        .map(tag => 
         String(tag)
           .replace(/^#/, "")  // 移除开头的 #
           .trim()
-      ).filter(Boolean);
+      )
+        .filter(Boolean)
+        .slice(0, 10);
       
-      return { title, body, tags };
+      return { title, body: ensureBodyLayout(body), tags };
     };
     
-    const finalOptions: CopyOption[] = [
-      cleanCopy(copy1!),
-      cleanCopy(copy2!)
-    ];
+    const retryOnce = async (which: 1 | 2, reasons: string[]) => {
+      const basePrompt = which === 1 ? prompt1 : prompt2;
+      const repairHint = `\n\n【强制修复指令】你上一次的输出不达标：${reasons.join("；")}。请严格按 JSON 输出 {\"title\":\"...\",\"body\":\"...\",\"tags\":[...]}，并满足：title ≤20字含1-4emoji；body 100-200字，至少2段且段落间空行，整体不紧凑，适量emoji点缀，结尾互动提问；tags 8-10个且与正文一致。只返回 JSON。`;
+      const completion = await client.chat.completions.create({
+        messages: [
+          { role: "system", content: singleCopySystemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: basePrompt + repairHint },
+              ...(imageUrl ? [{ type: "image_url", image_url: { url: imageUrl } }] : []),
+            ] as any,
+          },
+        ],
+        model: modelFromCfg,
+        temperature: 0.65,
+        max_tokens: Number.isFinite(maxTokens) ? maxTokens : 4096,
+      });
+      return completion.choices[0].message.content || "";
+    };
+
+    // 先清洗成最终结构
+    let opt1 = cleanCopy(copy1 || { title: "", body: "", tags: [] });
+    let opt2 = cleanCopy(copy2 || { title: "", body: "", tags: [] });
+
+    // 校验：文案2必须和文案1一样“能看”，不达标则只重试该篇一次
+    const v1 = validateCopy(opt1);
+    if (!v1.ok) {
+      console.warn("⚠️ 文案1未达标，触发重试一次：", v1.reasons);
+      const rawRetry = await retryOnce(1, v1.reasons);
+      const parsedRetry = extractJson(rawRetry) || extractJson(rawRetry.replace(/```/g, ""));
+      if (parsedRetry?.title || parsedRetry?.Title) {
+        opt1 = cleanCopy({
+          title: parsedRetry.title || parsedRetry.Title || "",
+          body: parsedRetry.body || parsedRetry.Body || parsedRetry.content || parsedRetry.Content || "",
+          tags: Array.isArray(parsedRetry.tags) ? parsedRetry.tags : Array.isArray(parsedRetry.Tags) ? parsedRetry.Tags : [],
+        });
+      }
+    }
+
+    const v2 = validateCopy(opt2);
+    if (!v2.ok) {
+      console.warn("⚠️ 文案2未达标，触发重试一次：", v2.reasons);
+      const rawRetry = await retryOnce(2, v2.reasons);
+      const parsedRetry = extractJson(rawRetry) || extractJson(rawRetry.replace(/```/g, ""));
+      if (parsedRetry?.title || parsedRetry?.Title) {
+        opt2 = cleanCopy({
+          title: parsedRetry.title || parsedRetry.Title || "",
+          body: parsedRetry.body || parsedRetry.Body || parsedRetry.content || parsedRetry.Content || "",
+          tags: Array.isArray(parsedRetry.tags) ? parsedRetry.tags : Array.isArray(parsedRetry.Tags) ? parsedRetry.Tags : [],
+        });
+      }
+    }
+
+    const finalOptions: CopyOption[] = [opt1, opt2];
     
     console.log(`✅ 最终返回 2 篇文案（已清理）`);
     console.log(`  文案1: 标题=${finalOptions[0]?.title?.substring(0, 30)}..., 正文=${finalOptions[0]?.body?.length || 0}字, 标签=${finalOptions[0]?.tags?.length || 0}个`);

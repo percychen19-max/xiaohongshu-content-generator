@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ImagePlus, Sparkles, Copy, Download, Loader2, Crown, Eye, FolderDown } from "lucide-react";
+import { ImagePlus, Sparkles, Copy, Download, Loader2, Crown, Eye, FolderDown, KeyRound } from "lucide-react";
 
 type CopyOption = {
   title: string;
@@ -38,7 +38,13 @@ export default function GeneratePage() {
   const [isImageLoading, setIsImageLoading] = useState(false);
   
   const [userInfo, setUserInfo] = useState<{ phone: string; freeUsage: number } | null>(null);
+  const [isUserLoading, setIsUserLoading] = useState(true);
   const [showRechargeDialog, setShowRechargeDialog] = useState(false);
+  const [showChangePasswordDialog, setShowChangePasswordDialog] = useState(false);
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   
   // 图片预览状态
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -48,16 +54,31 @@ export default function GeneratePage() {
 
   useEffect(() => {
     isMountedRef.current = true;
+    let cancelled = false;
+    setIsUserLoading(true);
+    
     fetch("/api/user/me")
       .then(res => res.json())
       .then(data => {
-        if (!isMountedRef.current) return; // 防止卸载后更新
-        if (!data.error) setUserInfo(data);
-        else router.push("/login");
+        if (cancelled || !isMountedRef.current) return; // 防止卸载后更新
+        if (!data.error) {
+          setUserInfo(data);
+        } else {
+          // 使用 replace 避免历史记录问题
+          router.replace("/login");
+          return;
+        }
+        setIsUserLoading(false);
       })
-      .catch(console.error);
+      .catch((err) => {
+        if (!cancelled && isMountedRef.current) {
+          console.error("获取用户信息失败:", err);
+          router.replace("/login");
+        }
+      });
     
     return () => {
+      cancelled = true;
       isMountedRef.current = false;
     };
   }, [router]);
@@ -89,19 +110,10 @@ export default function GeneratePage() {
     const currentPositivePrompt = positivePrompt;
     const currentNegativePrompt = negativePrompt;
 
-    // 重置状态（清空之前的结果）
+    // 重置结果（但保留输入，便于重复生成/调整）
     setCopyOptions(null);
     setSelectedCopyIndex(0);
     setGeneratedImages([]);
-    
-    // 清空输入框（为下次生成做准备）
-    setProductName("");
-    setDescription("");
-    setSelectedImage(null);
-    setRefImages([]);
-    setPrimaryIndex(0);
-    setPositivePrompt("");
-    setNegativePrompt("");
     
     // 阶段一：生成文案
     setIsCopyLoading(true);
@@ -238,7 +250,11 @@ export default function GeneratePage() {
       const pRes = await fetch("/api/generate/image-prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ copy: copyForImages }),
+        body: JSON.stringify({
+          copy: copyForImages,
+          productName: currentProductName,
+          description: currentDescription,
+        }),
       });
       const pData = await pRes.json();
       const prompts: string[] = Array.isArray(pData.prompts) ? pData.prompts : [];
@@ -247,22 +263,34 @@ export default function GeneratePage() {
       setGeneratedImages([]);
       for (let i = 0; i < prompts.length; i++) {
         const one = prompts[i];
-        const r = await fetch("/api/generate/image/one", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            productName: currentProductName,
-            prompt: one,
-            positivePrompt: currentPositivePrompt,
-            negativePrompt: currentNegativePrompt,
-            images: currentRefImages,
-            primaryIndex: currentPrimaryIndex,
-          }),
-        });
-        const d = await r.json();
-        if (d.url) {
-          setGeneratedImages((prev) => [...prev, d.url]);
+        let url: string | null = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const r = await fetch("/api/generate/image/one", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                productName: currentProductName,
+                prompt: one,
+                positivePrompt: currentPositivePrompt,
+                negativePrompt: currentNegativePrompt,
+                images: currentRefImages,
+                primaryIndex: currentPrimaryIndex,
+              }),
+            });
+            const d = await r.json();
+            if (d.url) {
+              url = d.url;
+              break;
+            } else {
+              console.error("单张生图失败:", d.error || r.statusText);
+            }
+          } catch (err) {
+            console.error("单张生图异常:", err);
+          }
         }
+        // 保证返回6个占位，失败则推空字符串
+        setGeneratedImages((prev) => [...prev, url || ""]);
       }
       await deductQuota();
     } catch (e) {
@@ -315,6 +343,49 @@ export default function GeneratePage() {
     return "";
   };
 
+  const renderBody = (body?: string) => {
+    const text = (body || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+    if (!text) return null;
+
+    const blocks = text.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+    return (
+      <div className="space-y-3">
+        {blocks.map((block, idx) => {
+          const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+          const isList =
+            lines.length >= 2 &&
+            lines.every((l) => /^(?:-|•|\\*|\\d+[.)]|✔️|✅|✨)/u.test(l));
+
+          if (isList) {
+            const items = lines.map((l) => l.replace(/^(?:-|•|\\*|\\d+[.)]|✔️|✅|✨)\\s*/u, "").trim());
+            return (
+              <ul key={idx} className="list-disc pl-5 space-y-1 text-sm text-foreground/90 leading-relaxed">
+                {items.map((it, j) => (
+                  <li key={j}>{it}</li>
+                ))}
+              </ul>
+            );
+          }
+
+          return (
+            <p key={idx} className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
+              {block}
+            </p>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // 加载中状态，避免 DOM 操作冲突
+  if (isUserLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-muted/30">
       {/* 顶部导航 (保持不变) */}
@@ -322,7 +393,7 @@ export default function GeneratePage() {
         <div className="container h-16 flex items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <div className="bg-primary text-primary-foreground p-1 rounded font-bold text-xs">AI</div>
-            <div className="font-bold text-lg">小红书爆文生成</div>
+            <div className="font-bold text-lg">内容生产平台</div>
           </div>
           <div className="flex items-center gap-4">
             <Button size="sm" onClick={() => setShowRechargeDialog(true)} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white border-0">
@@ -341,6 +412,11 @@ export default function GeneratePage() {
               <DropdownMenuContent className="w-56" align="end">
                 <DropdownMenuLabel>我的账户: {userInfo?.phone || "加载中..."}</DropdownMenuLabel>
                 <DropdownMenuItem disabled>剩余额度: {userInfo?.freeUsage ?? 0}次</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setShowChangePasswordDialog(true)}>
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  修改密码
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -486,9 +562,7 @@ export default function GeneratePage() {
                       </div>
                       <div className="space-y-2">
                         <div className="text-base font-semibold whitespace-pre-wrap">{copyOptions[selectedCopyIndex]?.title}</div>
-                        <div className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                          {copyOptions[selectedCopyIndex]?.body}
-                        </div>
+                        {renderBody(copyOptions[selectedCopyIndex]?.body)}
                         <div className="text-sm text-muted-foreground whitespace-pre-wrap">
                           {(copyOptions[selectedCopyIndex]?.tags || []).map((t) => `#${t}`).join(" ")}
                         </div>
@@ -592,6 +666,97 @@ export default function GeneratePage() {
         <DialogContent>
           <DialogHeader><DialogTitle>升级专业版</DialogTitle></DialogHeader>
           <div className="py-8 text-center"><p>请联系管理员充值 (模拟)</p></div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 修改密码弹窗 */}
+      <Dialog open={showChangePasswordDialog} onOpenChange={setShowChangePasswordDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>修改密码</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="oldPassword">原密码</Label>
+              <Input
+                id="oldPassword"
+                type="password"
+                placeholder="请输入原密码"
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">新密码</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                placeholder="请输入新密码（至少6位）"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">确认新密码</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="请再次输入新密码"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+            <Button
+              className="w-full"
+              onClick={async () => {
+                if (!oldPassword || !newPassword || !confirmPassword) {
+                  alert("请填写完整信息");
+                  return;
+                }
+                if (newPassword.length < 6) {
+                  alert("新密码至少需要6位");
+                  return;
+                }
+                if (newPassword !== confirmPassword) {
+                  alert("两次输入的新密码不一致");
+                  return;
+                }
+                setIsChangingPassword(true);
+                try {
+                  const res = await fetch("/api/user/change-password", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ oldPassword, newPassword }),
+                  });
+                  const data = await res.json();
+                  if (res.ok) {
+                    alert("密码修改成功");
+                    setShowChangePasswordDialog(false);
+                    setOldPassword("");
+                    setNewPassword("");
+                    setConfirmPassword("");
+                  } else {
+                    alert(data.error || "密码修改失败");
+                  }
+                } catch (err) {
+                  console.error(err);
+                  alert("网络错误");
+                } finally {
+                  setIsChangingPassword(false);
+                }
+              }}
+              disabled={isChangingPassword}
+            >
+              {isChangingPassword ? (
+                <>
+                  <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                  修改中...
+                </>
+              ) : (
+                "确认修改"
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

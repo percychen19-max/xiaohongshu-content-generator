@@ -1,0 +1,10 @@
+{
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfile": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "sh -c 'npx prisma migrate deploy --schema=./prisma/schema.prisma && node server.js'",
+    "restartPolicy": "always"
+  }
+}

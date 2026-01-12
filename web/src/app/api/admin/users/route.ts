@@ -55,7 +55,7 @@ export async function POST(req: Request) {
     const created = await prisma.user.create({
       data: {
         phone,
-        freeUsage: typeof freeUsage === "number" ? freeUsage : 10,
+        freeUsage: typeof freeUsage === "number" ? freeUsage : 3,
         tokenBalance: typeof tokenBalance === "number" ? tokenBalance : 0,
       },
     });

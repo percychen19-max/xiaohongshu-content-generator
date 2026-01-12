@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.env.local
+.env*.local
+*.log
+.DS_Store
+*.db
+*.db-journal
+dev.db
+dist
+build
+coverage
+.vercel
+.vscode
+.idea
+

@@ -1,7 +1,85 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, FileText, CreditCard, TrendingUp } from "lucide-react";
+import { Users, FileText, CreditCard, TrendingUp, Activity, Zap } from "lucide-react";
+import { Loader2 } from "lucide-react";
+
+interface StatsData {
+  totalUsers: number;
+  totalGenerations: number;
+  newUsersToday: number;
+  generationsToday: number;
+  totalConsumed: number;
+  todayRevenue: number;
+  apiCost: number;
+  newUsersChange: number;
+  generationsChange: number;
+}
 
 export default function AdminDashboard() {
+  const [stats, setStats] = useState<StatsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch("/api/admin/stats");
+        if (!res.ok) {
+          throw new Error("获取统计数据失败");
+        }
+        const data = await res.json();
+        setStats(data);
+        setError(null);
+      } catch (err: any) {
+        setError(err.message || "加载失败");
+        console.error("获取统计数据失败:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+    // 每30秒自动刷新一次
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatNumber = (num: number) => {
+    return num.toLocaleString("zh-CN");
+  };
+
+  const formatChange = (change: number) => {
+    if (change === 0) return "无变化";
+    const sign = change > 0 ? "+" : "";
+    return `${sign}${change} 较昨日`;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <p className="text-red-500 mb-2">加载失败</p>
+          <p className="text-sm text-muted-foreground">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return null;
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -11,54 +89,103 @@ export default function AdminDashboard() {
 
       {/* 数据卡片 */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* 总用户数 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">总用户数</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1,234</div>
+            <div className="text-2xl font-bold">{formatNumber(stats.totalUsers)}</div>
             <p className="text-xs text-muted-foreground">
-              +180 较昨日
+              {formatChange(stats.newUsersChange)}
             </p>
           </CardContent>
         </Card>
-        
+
+        {/* 总内容生产数 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">今日生成图文</CardTitle>
+            <CardTitle className="text-sm font-medium">总内容生产数</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">573</div>
+            <div className="text-2xl font-bold">{formatNumber(stats.totalGenerations)}</div>
             <p className="text-xs text-muted-foreground">
-              +20.1% 较上周
+              累计生成
             </p>
           </CardContent>
         </Card>
 
+        {/* 新增用户数（今日） */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">今日充值收入</CardTitle>
+            <CardTitle className="text-sm font-medium">新增用户数</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatNumber(stats.newUsersToday)}</div>
+            <p className="text-xs text-muted-foreground">
+              今日新增
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* 今日内容生产数 */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">今日内容生产</CardTitle>
+            <Zap className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatNumber(stats.generationsToday)}</div>
+            <p className="text-xs text-muted-foreground">
+              {formatChange(stats.generationsChange)}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 第二行：消耗次数、收入、成本 */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {/* 消耗次数情况 */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">消耗次数情况</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatNumber(stats.totalConsumed)}</div>
+            <p className="text-xs text-muted-foreground">
+              累计消耗次数
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* 今日收入（保留，后续计算） */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">今日收入</CardTitle>
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">¥ 2,350.00</div>
+            <div className="text-2xl font-bold">¥ {stats.todayRevenue.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
-              +19% 较昨日
+              待接入计算
             </p>
           </CardContent>
         </Card>
 
+        {/* API消耗成本（保留，后续计算） */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">API 消耗成本</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">¥ 124.50</div>
+            <div className="text-2xl font-bold">¥ {stats.apiCost.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
-              利润率 94%
+              待接入计算
             </p>
           </CardContent>
         </Card>
@@ -83,15 +210,9 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[1,2,3,4,5].map(i => (
-                <div key={i} className="flex items-center">
-                  <div className="ml-4 space-y-1">
-                    <p className="text-sm font-medium leading-none">用户 138****00{i}</p>
-                    <p className="text-xs text-muted-foreground">购买了 10次加油包</p>
-                  </div>
-                  <div className="ml-auto font-medium">+¥9.90</div>
-                </div>
-              ))}
+              <div className="text-sm text-muted-foreground text-center py-4">
+                待接入充值订单数据
+              </div>
             </div>
           </CardContent>
         </Card>

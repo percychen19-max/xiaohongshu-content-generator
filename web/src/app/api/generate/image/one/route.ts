@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import { segmentCommodityToPngBase64 } from "@/lib/aliyun";
 import { PrismaClient } from "@prisma/client";
-import { getDashscopeApiKey, getGoogleApiKey } from "@/lib/credentials";
-import { resolveApiKeyFromStore } from "@/lib/credential-resolver";
 import { generateImageWithGoogle } from "@/lib/google";
 
 export const runtime = "nodejs";
 
-const DEFAULT_IMAGE_BASE_URL = "https://dashscope.aliyuncs.com/api/v1";
-const DEFAULT_IMAGE_MODEL = "qwen-image-edit-plus";
+const DEFAULT_GOOGLE_BASE_URL = process.env.GOOGLE_BASE_URL || "https://gitaigc.com/v1";
 
 type RefImage = { dataUrl: string; note?: string };
 
@@ -29,6 +26,10 @@ function toBool(v: any, fallback = false) {
   if (typeof v === "boolean") return v;
   if (typeof v === "string") return v === "true" || v === "1" || v === "yes";
   return fallback;
+}
+
+function stripBase64Prefix(dataUrl: string) {
+  return dataUrl.includes("base64,") ? dataUrl.split("base64,")[1] : dataUrl;
 }
 
 export async function POST(req: Request) {
@@ -57,141 +58,95 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "配图引擎已在后台关闭" }, { status: 400 });
     }
 
-    const vendor = (await getConfig("IMAGE_ENGINE_VENDOR")) || "dashscope";
-    const imageProfile = (await getConfig("IMAGE_ENGINE_CRED_PROFILE")) || "default";
-    const imagesegProfile = (await getConfig("IMAGESEG_CRED_PROFILE")) || "default";
+    const textHintSourceEarly = [prompt, positivePrompt, negativePrompt].join(" ");
+    const hasTextHintEarly = /文字|字样|字樣|字体|文案|slogan|标语|logo|字迹|字帖/i.test(textHintSourceEarly);
 
-    // Google 模型使用不同的逻辑
-    if (vendor === "google") {
-      return await handleGoogleGeneration({
-        productName,
-        prompt,
-        positivePrompt,
-        negativePrompt,
-        images,
-        primaryIndex,
-        modelFromCfg: (await getConfig("IMAGE_ENGINE_MODEL_ID")) || "gemini-2.5-flash-image",
-        profile: imageProfile,
-        imagesegProfile,
-      });
-    }
+    // 按需求：全部先用 Google 生图，再根据文字需求决定是否二次编辑
+    let vendor = "google";
+    const imageProfile =
+      (await getConfig("IMAGE_ENGINE_CRED_PROFILE")) ||
+      process.env.IMAGE_ENGINE_CRED_PROFILE ||
+      "default";
+    const imagesegProfile =
+      (await getConfig("IMAGESEG_CRED_PROFILE")) ||
+      process.env.IMAGESEG_CRED_PROFILE ||
+      "default";
 
-    // DashScope 模型（原有逻辑）
-    const baseURL =
+    // 生图流程：先用 Google 生成，再视文字需求用 qwen 二次编辑文字
+    // ----------------------------------------------------
+    // 第一步：Google 生成基础图
+    const baseURLGoogle =
       (await getConfig("IMAGE_ENGINE_BASE_URL")) ||
-      process.env.DASHSCOPE_BASE_URL ||
-      process.env.IMAGE_BASE_URL ||
-      DEFAULT_IMAGE_BASE_URL;
-    const store = await resolveApiKeyFromStore({ type: "image", vendor, profile: imageProfile });
-    const apiKey = store?.apiKey || (vendor === "dashscope" ? getDashscopeApiKey(imageProfile) : "");
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: `服务端未配置配图引擎密钥：请在"API管理中心"配置 vendor=${vendor} profile=${imageProfile}，或设置环境变量` },
-        { status: 500 }
-      );
-    }
+      process.env.IMAGE_ENGINE_BASE_URL ||
+      process.env.GOOGLE_BASE_URL ||
+      DEFAULT_GOOGLE_BASE_URL;
 
-    const finalBaseURL = (await getConfig("IMAGE_ENGINE_BASE_URL")) || store?.baseURL || baseURL;
-    const modelFromCfg = (await getConfig("IMAGE_ENGINE_MODEL_ID")) || process.env.DASHSCOPE_MODEL || DEFAULT_IMAGE_MODEL;
-    const defaultNeg = (await getConfig("IMAGE_ENGINE_NEGATIVE_PROMPT")) || "";
-    const promptExtend = toBool(await getConfig("IMAGE_ENGINE_PROMPT_EXTEND"), false);
-    const useHttp = toBool(await getConfig("IMAGE_ENGINE_USE_HTTP"), false);
-
-    const list = Array.isArray(images) ? images.filter((x) => x?.dataUrl) : [];
-    const pIdx = typeof primaryIndex === "number" && primaryIndex >= 0 ? primaryIndex : 0;
-    const primary = list[pIdx];
-
-    // 支持无图：用白底画布作为输入图，让模型“随机生成”
-    let inputImages: string[] = [];
-
-    if (list.length === 0) {
-      // 用一个白底作为“可编辑图”
-      const blank = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAmMB9qA7qjYAAAAASUVORK5CYII=";
-      inputImages = [blank];
-    } else {
-      // 多图：全部抠图（但 qwen-image-edit-plus 最多支持 1-3 张输入）
-      const cutouts: string[] = [];
-      const max = Math.min(list.length, 3);
+    // 处理参考图，可选跳过抠图
+    const listGoogle = Array.isArray(images) ? images.filter((x) => x?.dataUrl) : [];
+    const skipSeg =
+      toBool(await getConfig("IMAGESEG_SKIP"), true) || toBool(process.env.SKIP_IMAGE_SEGMENT, true);
+    let referenceImages: string[] | undefined = undefined;
+    if (listGoogle.length > 0) {
+      const max = Math.min(listGoogle.length, 3);
+      referenceImages = [];
       for (let i = 0; i < max; i++) {
         try {
-          const b64 = list[i].dataUrl.includes("base64,") ? list[i].dataUrl.split("base64,")[1] : list[i].dataUrl;
-          const cut = await segmentCommodityToPngBase64(b64, imagesegProfile);
-          cutouts.push(`data:image/png;base64,${cut}`);
-        } catch (e) {
-          // 抠图失败不致命：退化为直接使用原图（保证“可用性优先”，便于你快速迭代测试）
-          console.warn("⚠️ 抠图失败，已退化为原图输入：", (e as any)?.message || e);
-          cutouts.push(list[i].dataUrl);
+          const b64 = stripBase64Prefix(listGoogle[i].dataUrl);
+          if (skipSeg) {
+            referenceImages.push(b64);
+          } else {
+            const cut = await segmentCommodityToPngBase64(b64, imagesegProfile);
+            referenceImages.push(cut);
+          }
+        } catch {
+          const b64 = stripBase64Prefix(listGoogle[i].dataUrl);
+          referenceImages.push(b64);
         }
       }
-      inputImages = cutouts;
     }
 
+    // 构建提示词（复用后续 qwen 文本修复与兜底）
     const notesText =
-      list.length > 0
-        ? list
+      listGoogle.length > 0
+        ? listGoogle
             .slice(0, 3)
             .map((img, idx) => (img.note ? `图${idx + 1}备注：${img.note}` : `图${idx + 1}备注：无`))
             .join("\n")
         : "";
 
     const hardConstraint =
-      list.length === 0
+      listGoogle.length === 0
         ? `要求：根据“产品名称+卖点”随机生成符合小红书审美的配图风格，不要生成水印/二维码。产品外观尽量贴合：${productName}。`
         : `硬性要求：如果画面出现产品，必须严格参考输入图产品，外观/颜色/Logo/材质/结构/比例/纹理细节完全不变，不得改动产品主体，不得重绘变形；禁止生成多余商品/配件；整体像真实拍摄。`;
 
-    const finalText = [
+    const finalPrompt = [
       prompt,
       positivePrompt ? `用户正向补充：${positivePrompt}` : "",
       negativePrompt ? `用户反向补充：${negativePrompt}` : "",
       notesText ? `参考图备注：\n${notesText}` : "",
       hardConstraint,
+      "画面需符合小红书种草风格与文案调性，真实生活感、无硬广感。",
     ]
       .filter(Boolean)
       .join("\n");
 
-    const payload = {
-      model: modelFromCfg,
-      input: {
-        messages: [
-          {
-            role: "user",
-            content: [
-              ...inputImages.map((img) => ({ image: img })),
-              { text: finalText },
-            ],
-          },
-        ],
-      },
-      parameters: {
-        n: 1,
-        negative_prompt:
-          negativePrompt ||
-          defaultNeg ||
-          (list.length === 0
-            ? "低质量, 低分辨率, 模糊, 强烈AI感, 水印, 二维码"
-            : "低质量, 低分辨率, 模糊, 强烈AI感, 产品主体变形, 产品外观改变, 颜色改变, Logo改变, 材质改变, 比例不对, 结构错误, 多余商品, 多余配件, 水印, 二维码"),
-        prompt_extend: !!promptExtend,
-        watermark: false,
-      },
-    };
+    // 当前版本要求：不生成任何文字/水印/Logo（强约束：连“书脊可读字/界面UI/字幕”都不要）
+    const textGuideline =
+      "绝对禁止出现任何可读文字（中文/英文/数字都不行），包括：slogan/标题/海报字/字幕/水印/Logo/二维码/界面UI/书脊可读字/包装可读字。只输出纯画面与氛围，不要任何字形或可识别字符。";
+    const finalPromptWithText = [finalPrompt, textGuideline].filter(Boolean).join("\n");
 
-    const res = await fetch(`${finalBaseURL}/services/aigc/multimodal-generation/generation`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      return NextResponse.json({ error: data?.message || "生图失败", raw: data }, { status: 500 });
-    }
-    const outUrl = data.output?.choices?.[0]?.message?.content?.[0]?.image;
-    if (!outUrl) {
-      return NextResponse.json({ error: "生图无结果", raw: data }, { status: 500 });
-    }
-    return NextResponse.json({ url: outUrl });
+    const googleImage = await generateImageWithGoogle(
+      finalPromptWithText,
+      (await getConfig("IMAGE_ENGINE_MODEL_ID")) || process.env.IMAGE_ENGINE_MODEL_ID || "gemini-2.5-flash-image",
+      imageProfile,
+      baseURLGoogle,
+      true,
+      referenceImages
+    );
+
+    // 直接返回 Gemini 结果，不再调用 qwen
+    return NextResponse.json({ url: `data:image/png;base64,${googleImage}` });
+
   } catch (e: any) {
     console.error("单张生图失败:", e);
     return NextResponse.json({ error: e?.message || "失败" }, { status: 500 });
@@ -242,19 +197,33 @@ async function handleGoogleGeneration(opts: {
       : `硬性要求：如果画面出现产品，必须严格参考输入图产品，外观/颜色/Logo/材质/结构/比例/纹理细节完全不变，不得改动产品主体，不得重绘变形；禁止生成多余商品/配件；整体像真实拍摄。`;
 
   const finalPrompt = [
-    prompt,
-    positivePrompt ? `用户正向补充：${positivePrompt}` : "",
-    negativePrompt ? `用户反向补充：${negativePrompt}` : "",
+    "你是小红书风格的视觉导演，需生成符合文案语境的配图，侧重产品卖点，不只是换背景。",
+    `产品：${productName}`,
+    `卖点：${opts.negativePrompt ? `${opts.negativePrompt}（反向约束）` : ""}${opts.prompt ? "" : ""}`,
+    `文案/场景提示：${prompt}`,
+    positivePrompt ? `正向补充：${positivePrompt}` : "",
+    negativePrompt ? `反向补充：${negativePrompt}` : "",
     notesText ? `参考图备注：\n${notesText}` : "",
     hardConstraint,
+    "生成要求：保持小红书清新生活感/质感风；可产生活动场景、人物互动、道具细节、空间氛围等多样画面；如果有参考图，必须保持产品形态、材质、结构和比例，不得改变外观或形状；禁止水印/二维码/乱写字。如需画面中文字（中/英文），必须清晰无畸变、不乱码、不错别字，排版自然。",
   ]
     .filter(Boolean)
     .join("\n");
 
+  // 检测是否需要文字清晰度强化（涉及文字/字体/文案等提示）
+  const textHintSource = [prompt, positivePrompt, negativePrompt, notesText].join(" ");
+  const hasTextHint = /文字|字样|字樣|字体|文案|slogan|标语|logo|字迹|字帖/i.test(textHintSource);
+
   try {
-    // 获取 baseURL 配置（用于代理服务）
-    const baseURL = (await getConfig("IMAGE_ENGINE_BASE_URL")) || null;
-    const useHttp = toBool(await getConfig("IMAGE_ENGINE_USE_HTTP"), !!baseURL);
+    // 获取 baseURL 配置（用于代理服务），优先环境变量
+    const baseURL =
+      (await getConfig("IMAGE_ENGINE_BASE_URL")) ||
+      process.env.IMAGE_ENGINE_BASE_URL ||
+      process.env.GOOGLE_BASE_URL ||
+      DEFAULT_GOOGLE_BASE_URL;
+    // 对第三方统一强制 HTTP 兼容模式，避免走官方域名
+    const useHttp = true;
+    console.log("🌐 Google 生图调用参数", { baseURL, model: modelFromCfg, profile, refCount: list.length });
 
     // 处理参考图：如果有上传图片，先抠图，然后传给 Google API
     let referenceImages: string[] = [];

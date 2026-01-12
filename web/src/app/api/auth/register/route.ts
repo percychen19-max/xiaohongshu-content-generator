@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { encrypt } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { verifyPassword } from "@/lib/password";
+import { hashPassword } from "@/lib/password";
 
 export async function POST(req: Request) {
   try {
@@ -17,34 +17,37 @@ export async function POST(req: Request) {
     }
 
     // 2. 验证密码
-    if (!password) {
-      return NextResponse.json({ error: "请输入密码" }, { status: 400 });
+    if (!password || password.length < 6) {
+      return NextResponse.json({ error: "密码至少需要6位" }, { status: 400 });
     }
 
-    // 3. 查询用户
-    const user = await prisma.user.findUnique({
+    // 3. 检查手机号是否已注册
+    const existingUser = await prisma.user.findUnique({
       where: { phone: p },
     });
 
-    if (!user) {
-      return NextResponse.json({ error: "手机号未注册，请先注册" }, { status: 404 });
+    if (existingUser) {
+      return NextResponse.json({ error: "该手机号已注册，请直接登录" }, { status: 409 });
     }
 
-    // 4. 验证密码（老用户可能没有密码，需要先注册）
-    if (!user.password) {
-      return NextResponse.json({ error: "该账号尚未设置密码，请先注册" }, { status: 403 });
-    }
-    if (!verifyPassword(password, user.password)) {
-      return NextResponse.json({ error: "密码错误" }, { status: 401 });
-    }
+    // 4. 创建新用户
+    const hashedPassword = hashPassword(password);
+    const user = await prisma.user.create({
+      data: {
+        phone: p,
+        password: hashedPassword,
+        freeUsage: 3, // 新用户赠送3次免费额度
+        tokenBalance: 0,
+      },
+    });
 
-    console.log(`✅ 密码验证通过，处理用户登录: ${phone}`);
+    console.log(`✅ 新用户注册成功: ${phone} (ID: ${user.id})`);
 
-    // 5. 检查是否为管理员（可以通过环境变量或数据库配置）
+    // 5. 检查是否为管理员
     const adminPhones = (process.env.ADMIN_PHONES || "").split(",").filter(Boolean);
     const isAdmin = adminPhones.includes(p) || user.id === process.env.ADMIN_USER_ID;
 
-    // 6. 制作会话数据
+    // 6. 制作会话数据并自动登录
     const sessionData = {
       userId: user.id,
       phone: user.phone,
@@ -64,7 +67,7 @@ export async function POST(req: Request) {
       path: "/",
     });
 
-    console.log(`✅ 登录成功: ${phone} (免费额度: ${user.freeUsage}, Token: ${user.tokenBalance})`);
+    console.log(`✅ 注册并自动登录成功: ${phone}`);
 
     return NextResponse.json({
       success: true,
@@ -76,10 +79,11 @@ export async function POST(req: Request) {
       },
     });
   } catch (error: any) {
-    console.error("登录失败:", error);
+    console.error("注册失败:", error);
     return NextResponse.json(
       { error: "服务端异常: " + (error.message || "未知错误") },
       { status: 500 }
     );
   }
 }
+

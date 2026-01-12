@@ -17,7 +17,7 @@ export async function sendVerificationCode({ phone, code }: SendSmsParams): Prom
   // 检查环境变量
   const accessKeyId = process.env.ALIYUN_SMS_ACCESS_KEY_ID;
   const accessKeySecret = process.env.ALIYUN_SMS_ACCESS_KEY_SECRET;
-  const signName = process.env.ALIYUN_SMS_SIGN_NAME || "小红书爆文生成";
+  const signName = process.env.ALIYUN_SMS_SIGN_NAME || "内容生产平台";
   const templateCode = process.env.ALIYUN_SMS_TEMPLATE_CODE;
 
   if (!accessKeyId || !accessKeySecret) {
