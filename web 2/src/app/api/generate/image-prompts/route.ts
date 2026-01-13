@@ -55,6 +55,12 @@ const DEFAULT_TEXT_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3";
 const DEFAULT_GOOGLE_BASE_URL = process.env.GOOGLE_BASE_URL || "https://gitaigc.com/v1";
 const DEFAULT_TEXT_MODEL = "doubao-seed-1-6-lite-251015";
 
+function normalizeModelIdForGoogle(modelId: string) {
+  const s = String(modelId || "").trim();
+  if (s.endsWith("-latest")) return s.replace(/-latest$/, "");
+  return s;
+}
+
 export async function POST(req: Request) {
   try {
     const { copy, productName, description } = await req.json();
@@ -125,6 +131,7 @@ export async function POST(req: Request) {
       process.env.COPY_ENGINE_MODEL_ID ||
       process.env.AI_MODEL_NAME ||
       DEFAULT_TEXT_MODEL;
+    const finalModel = vendor === "google" ? normalizeModelIdForGoogle(model) : model;
 
     const finalBaseURL =
       (await getConfig("COPY_ENGINE_BASE_URL")) ||
@@ -143,7 +150,7 @@ export async function POST(req: Request) {
             `\n上一次输出不合格，请严格修正并重新输出6条。\n错误明细：${prompts ? validatePrompts(prompts).errors.join("；") : "解析失败"}\n`;
 
       const r = await client.chat.completions.create({
-        model,
+        model: finalModel,
         messages: [{ role: "user", content }],
       });
 

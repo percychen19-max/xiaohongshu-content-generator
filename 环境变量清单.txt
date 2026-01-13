@@ -27,7 +27,7 @@
    值: https://gitaigc.com/v1
 
 9. COPY_ENGINE_MODEL_ID
-   值: gemini-1.5-pro-latest
+   值: gemini-1.5-pro
 
 10. GOOGLE_API_KEY
     值: 你的Google_API_Key

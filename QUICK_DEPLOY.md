@@ -11,7 +11,7 @@ cd /Users/percy/xhs/xiaohongshu-content-generator
 
 # 2. 部署到 Zeabur
 # 方式 A: 使用 Zeabur CLI（如果已安装）
-cd web
+cd web\ 2
 zeabur deploy
 
 # 方式 B: 在 Zeabur 控制台上传 deploy.tar.gz
@@ -43,7 +43,7 @@ zeabur login
 ### 步骤 3：部署项目
 
 ```bash
-cd /Users/percy/xhs/xiaohongshu-content-generator/web
+cd /Users/percy/xhs/xiaohongshu-content-generator/web\ 2
 zeabur deploy
 ```
 
@@ -67,7 +67,7 @@ cd /Users/percy/xhs/xiaohongshu-content-generator
 ./create_deploy_package.sh
 
 # 3. 使用 CLI 重新部署
-cd web
+cd web\ 2
 zeabur deploy --project xhs
 ```
 
@@ -116,7 +116,7 @@ PORT=3000
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=你的管理员密码
 COPY_ENGINE_VENDOR=google
-COPY_ENGINE_MODEL_ID=gemini-1.5-pro-latest
+COPY_ENGINE_MODEL_ID=gemini-1.5-pro
 COPY_ENGINE_BASE_URL=https://gitaigc.com/v1
 GOOGLE_API_KEY=你的Google_API_密钥
 IMAGE_ENGINE_VENDOR=google

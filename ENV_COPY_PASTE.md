@@ -19,7 +19,7 @@
   "ADMIN_USERNAME": "admin",
   "ADMIN_PASSWORD": "admin123",
   "COPY_ENGINE_VENDOR": "google",
-  "COPY_ENGINE_MODEL_ID": "gemini-1.5-pro-latest",
+  "COPY_ENGINE_MODEL_ID": "gemini-1.5-pro",
   "COPY_ENGINE_BASE_URL": "https://gitaigc.com/v1",
   "GOOGLE_API_KEY": "你的Google_API_密钥",
   "IMAGE_ENGINE_VENDOR": "google",
@@ -65,7 +65,7 @@
 值: google
 
 变量名: COPY_ENGINE_MODEL_ID
-值: gemini-1.5-pro-latest
+值: gemini-1.5-pro
 
 变量名: COPY_ENGINE_BASE_URL
 值: https://gitaigc.com/v1

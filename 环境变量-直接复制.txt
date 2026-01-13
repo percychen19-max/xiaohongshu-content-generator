@@ -23,7 +23,7 @@ COPY_ENGINE_BASE_URL
 https://gitaigc.com/v1
 
 COPY_ENGINE_MODEL_ID
-gemini-1.5-pro-latest
+gemini-1.5-pro
 
 GOOGLE_API_KEY
 你的Google_API_Key

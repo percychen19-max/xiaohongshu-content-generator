@@ -16,7 +16,7 @@
 2. 点击 "New Project" 创建新项目
 3. 选择 "Deploy from GitHub" 并授权 GitHub
 4. 选择你的仓库：`xiaohongshu-content-generator`
-5. 选择根目录：**`web`**（重要！）
+5. 选择根目录：**`web 2`**（重要！注意 `web` 和 `2` 之间有空格）
 
 ### 第二步：添加 PostgreSQL 数据库
 
@@ -47,7 +47,7 @@ DEV_FIXED_CODE=1234
 
 # 文案生成引擎（Google 第三方）
 COPY_ENGINE_VENDOR=google
-COPY_ENGINE_MODEL_ID=gemini-1.5-pro-latest
+COPY_ENGINE_MODEL_ID=gemini-1.5-pro
 COPY_ENGINE_BASE_URL=https://gitaigc.com/v1
 GOOGLE_API_KEY=sk-your-google-api-key
 
@@ -85,7 +85,7 @@ ADMIN_PHONES=13800138000,13900139000
 
 在 Zeabur 部署前，需要将 Prisma schema 从 SQLite 改为 PostgreSQL：
 
-1. 修改 `web/prisma/schema.prisma`：
+1. 修改 `web 2/prisma/schema.prisma`：
    ```prisma
    datasource db {
      provider = "postgresql"
@@ -95,7 +95,7 @@ ADMIN_PHONES=13800138000,13900139000
 
 2. 创建新的迁移：
    ```bash
-   cd web
+   cd web\ 2
    npx prisma migrate dev --name init_postgresql
    ```
 
@@ -105,7 +105,7 @@ ADMIN_PHONES=13800138000,13900139000
 
 Zeabur 会自动检测到 Dockerfile，但需要确保：
 
-1. **根目录设置**：在 Zeabur 项目设置中，将 "Root Directory" 设置为 `web`
+1. **根目录设置**：在 Zeabur 项目设置中，将 "Root Directory" 设置为 `web 2`
 2. **构建命令**：Zeabur 会自动使用 Dockerfile，无需额外配置
 3. **启动命令**：已在 Dockerfile 中配置，会自动运行数据库迁移
 

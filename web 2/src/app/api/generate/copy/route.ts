@@ -12,6 +12,13 @@ const globalForPrisma = global as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
+function normalizeModelIdForGoogle(modelId: string) {
+  const s = String(modelId || "").trim();
+  // 兼容：部分网关/版本不支持 `*-latest`，会直接 404
+  if (s.endsWith("-latest")) return s.replace(/-latest$/, "");
+  return s;
+}
+
 async function getConfig(key: string) {
   try {
     const row = await prisma.systemConfig.findUnique({ where: { key } });
@@ -213,7 +220,9 @@ export async function POST(req: Request) {
       (await getConfig("COPY_ENGINE_MODEL_ID")) ||
       process.env.COPY_ENGINE_MODEL_ID ||
       process.env.AI_MODEL_NAME ||
-      (vendor === "google" ? "gemini-1.5-pro-latest" : DEFAULT_TEXT_MODEL);
+      (vendor === "google" ? "gemini-1.5-pro" : DEFAULT_TEXT_MODEL);
+
+    const model = vendor === "google" ? normalizeModelIdForGoogle(modelFromCfg) : modelFromCfg;
     
     // 根据供应商调整 System Prompt（融合“小红书标题正文生成专家”要求，强制两篇一致格式）
     let defaultSystemPrompt = `# Role: 小红书标题正文生成专家
@@ -371,7 +380,7 @@ ${imageUrl ? `**已提供参考图**：请结合图片理解产品外观、使�
             ] as any
           }
         ],
-        model: modelFromCfg,
+        model,
         temperature: Number.isFinite(temperature) ? temperature : 0.9,
         max_tokens: Number.isFinite(maxTokens) ? maxTokens : 4096,
       }),
@@ -386,7 +395,7 @@ ${imageUrl ? `**已提供参考图**：请结合图片理解产品外观、使�
             ] as any
           }
         ],
-        model: modelFromCfg,
+        model,
         temperature: Number.isFinite(temperature) ? temperature : 0.9,
         max_tokens: Number.isFinite(maxTokens) ? maxTokens : 4096,
       }),

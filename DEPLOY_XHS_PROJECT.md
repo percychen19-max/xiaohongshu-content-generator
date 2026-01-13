@@ -61,7 +61,7 @@ ADMIN_PASSWORD = admin123
 #### Google API 配置（文案生成）
 ```
 COPY_ENGINE_VENDOR = google
-COPY_ENGINE_MODEL_ID = gemini-1.5-pro-latest
+COPY_ENGINE_MODEL_ID = gemini-1.5-pro
 COPY_ENGINE_BASE_URL = https://gitaigc.com/v1
 GOOGLE_API_KEY = 你的Google_API_密钥
 ```
